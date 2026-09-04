@@ -16,6 +16,13 @@ class AuthorizationTest extends TestCase
         $this->get('/admin')->assertRedirect('/admin/login');
     }
 
+    public function test_admin_redirect_uses_forwarded_https_scheme(): void
+    {
+        $response = $this->withHeader('X-Forwarded-Proto', 'https')->get('/admin');
+
+        $this->assertStringStartsWith('https://', $response->headers->get('Location'));
+    }
+
     public function test_admin_rejects_a_user_without_the_publisher_group(): void
     {
         $user = User::factory()->create(['groups' => ['another-group']]);
