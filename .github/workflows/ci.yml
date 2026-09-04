@@ -27,6 +27,14 @@ jobs:
           coverage: none
       - name: Install PHP dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
       - name: Check formatting
         run: vendor/bin/pint --test
       - name: Run tests
