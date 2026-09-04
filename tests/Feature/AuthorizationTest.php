@@ -6,7 +6,9 @@ use App\Filament\Widgets\ContentChannelsOverview;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Redis;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -97,6 +99,7 @@ class AuthorizationTest extends TestCase
 
     public function test_system_status_uses_labeled_summaries_instead_of_raw_json(): void
     {
+        Cache::put('github-app-token', 'test-github-token');
         config()->set('ota.gitlab.token', 'test-token');
         $contentSha = str_repeat('b', 40);
         $gitlabUrl = rtrim(config('ota.gitlab.url'), '/');
@@ -130,5 +133,25 @@ class AuthorizationTest extends TestCase
     public function test_liveness_does_not_require_a_session_or_database_query(): void
     {
         $this->get('/health/live')->assertOk()->assertJson(['status' => 'ok']);
+    }
+
+    public function test_readiness_uses_the_authenticated_github_app_connection(): void
+    {
+        Cache::put('github-app-token', 'test-github-token');
+        Redis::shouldReceive('connection->command')->once()->with('ping')->andReturn('PONG');
+        config()->set('ota.weblate.token', 'test-weblate-token');
+        config()->set('ota.gitlab.token', 'test-gitlab-token');
+
+        Http::fake([
+            'https://api.github.com/repos/*' => Http::response(['object' => ['sha' => str_repeat('c', 40)]]),
+            '*' => Http::response([]),
+        ]);
+
+        $this->get('/health/ready')
+            ->assertOk()
+            ->assertJsonPath('checks.github', 'ok');
+
+        Http::assertSent(fn ($request): bool => str_starts_with($request->url(), 'https://api.github.com/repos/')
+            && $request->hasHeader('Authorization', 'Bearer test-github-token'));
     }
 }

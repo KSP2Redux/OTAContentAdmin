@@ -34,7 +34,7 @@ class SystemStatus extends Page
                 description: 'The live OTA content consumed by KSP2 Redux.',
                 icon: 'heroicon-o-code-bracket-square',
                 callback: function (): array {
-                    $sha = app(GitHubContentRepository::class)->headSha();
+                    $sha = app(GitHubContentRepository::class)->headSha(true);
 
                     return [
                         'status' => 'Connected',

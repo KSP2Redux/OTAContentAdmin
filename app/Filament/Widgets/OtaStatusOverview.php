@@ -13,7 +13,7 @@ class OtaStatusOverview extends StatsOverviewWidget
     protected function getStats(): array
     {
         try {
-            $sha = substr(app(GitHubContentRepository::class)->headSha(), 0, 12);
+            $sha = substr(app(GitHubContentRepository::class)->headSha(true), 0, 12);
         } catch (\Throwable) {
             $sha = 'Unavailable';
         }
