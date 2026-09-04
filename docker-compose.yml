@@ -1,4 +1,14 @@
 services:
+  upload-init:
+    image: busybox:1.37
+    restart: "no"
+    command: ["sh", "-c", "chown -R 33:33 /data && chmod 0770 /data"]
+    volumes:
+      - ota_uploads:/data
+    network_mode: none
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
   app:
     image: &app-image ${OTA_ADMIN_IMAGE:-ghcr.io/ksp2redux/otacontentadmin:main}
     pull_policy: always
@@ -49,6 +59,7 @@ services:
       timeout: 5s
       retries: 3
     depends_on:
+      upload-init: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
   worker:
@@ -64,6 +75,7 @@ services:
     read_only: true
     tmpfs: ["/tmp", "/var/www/html/storage/framework/cache", "/var/www/html/storage/framework/sessions", "/var/www/html/storage/framework/views", "/var/www/html/storage/logs"]
     depends_on:
+      upload-init: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
   scheduler:
@@ -78,6 +90,8 @@ services:
     cap_drop: [ALL]
     read_only: true
     tmpfs: ["/tmp", "/var/www/html/storage/framework/cache", "/var/www/html/storage/framework/sessions", "/var/www/html/storage/framework/views", "/var/www/html/storage/logs"]
+    depends_on:
+      upload-init: { condition: service_completed_successfully }
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
