@@ -22,6 +22,21 @@ final class CompatibilityCatalog
         return $this->data['source_sha'];
     }
 
+    public function version(): int
+    {
+        return (int) ($this->data['catalog_version'] ?? 0);
+    }
+
+    /** @return array{bodies: int, mission_types: int, bundled_missions: int} */
+    public function counts(): array
+    {
+        return [
+            'bodies' => count($this->bodies()),
+            'mission_types' => count($this->missionTypes()),
+            'bundled_missions' => count($this->bundledMissionIds()),
+        ];
+    }
+
     public function bodies(): array
     {
         return $this->data['bodies'] ?? [];
