@@ -1,0 +1,122 @@
+services:
+  app:
+    image: &app-image ${OTA_ADMIN_IMAGE:-ghcr.io/ksp2redux/otacontentadmin:main}
+    pull_policy: always
+    restart: unless-stopped
+    expose: ["8080"]
+    environment: &app-environment
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: https://ota-admin.rendezvous.dev
+      APP_KEY_FILE: /run/secrets/ota_app_key
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: ota_admin
+      DB_USERNAME: ota_admin
+      DB_PASSWORD_FILE: /run/secrets/ota_db_password
+      REDIS_HOST: redis
+      REDIS_CLIENT: predis
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      SESSION_LIFETIME: "480"
+      SESSION_ENCRYPT: "true"
+      SESSION_SECURE_COOKIE: "true"
+      QUEUE_CONNECTION: redis
+      AUTHENTIK_ISSUER: https://sso.rendezvous.dev/application/o/redux-ota-admin/
+      AUTHENTIK_REDIRECT_URI: https://ota-admin.rendezvous.dev/auth/callback
+      AUTHENTIK_PUBLISHER_GROUP: ksp2redux-ota-publishers
+      AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:?required}
+      AUTHENTIK_CLIENT_SECRET_FILE: /run/secrets/ota_authentik_secret
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?required}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:?required}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/ota_github_private_key
+      WEBLATE_TOKEN_FILE: /run/secrets/ota_weblate_token
+      GITLAB_TOKEN_FILE: /run/secrets/ota_gitlab_token
+    secrets: &app-secrets [ota_app_key, ota_db_password, ota_authentik_secret, ota_github_private_key, ota_weblate_token, ota_gitlab_token]
+    volumes: ["ota_uploads:/var/www/html/storage/app/ota-private"]
+    networks: [internal, caddy_net]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
+    read_only: true
+    tmpfs: ["/tmp", "/var/run/apache2", "/var/lock/apache2", "/var/www/html/storage/framework/cache:uid=33,gid=33,mode=0770", "/var/www/html/storage/framework/sessions:uid=33,gid=33,mode=0770", "/var/www/html/storage/framework/views:uid=33,gid=33,mode=0770", "/var/www/html/storage/logs:uid=33,gid=33,mode=0770"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  worker:
+    image: *app-image
+    pull_policy: always
+    restart: unless-stopped
+    command: ["php", "artisan", "queue:work", "--sleep=2", "--tries=1", "--timeout=3600"]
+    environment: *app-environment
+    secrets: *app-secrets
+    volumes: ["ota_uploads:/var/www/html/storage/app/ota-private"]
+    networks: [internal]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp", "/var/www/html/storage/framework/cache", "/var/www/html/storage/framework/sessions", "/var/www/html/storage/framework/views", "/var/www/html/storage/logs"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  scheduler:
+    image: *app-image
+    pull_policy: always
+    restart: unless-stopped
+    command: ["php", "artisan", "schedule:work"]
+    environment: *app-environment
+    secrets: *app-secrets
+    volumes: ["ota_uploads:/var/www/html/storage/app/ota-private"]
+    networks: [internal]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp", "/var/www/html/storage/framework/cache", "/var/www/html/storage/framework/sessions", "/var/www/html/storage/framework/views", "/var/www/html/storage/logs"]
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ota_admin
+      POSTGRES_USER: ota_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/ota_db_password
+    secrets: [ota_db_password]
+    volumes: ["ota_postgres:/var/lib/postgresql/data"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ota_admin -d ota_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["ota_redis:/data"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+networks:
+  internal:
+  caddy_net:
+    external: true
+volumes:
+  ota_postgres:
+  ota_redis:
+  ota_uploads:
+secrets:
+  ota_app_key: { external: true }
+  ota_db_password: { external: true }
+  ota_authentik_secret: { external: true }
+  ota_github_private_key: { external: true }
+  ota_weblate_token: { external: true }
+  ota_gitlab_token: { external: true }

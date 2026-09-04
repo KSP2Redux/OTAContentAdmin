@@ -1,0 +1,38 @@
+{
+  "catalog_version": 1,
+  "source_sha": "a7126074035d2e85b54286b3998b760229f07666",
+  "localization_key_pattern": "~^(Missions|Tutorials)/~",
+  "localization_fields": ["CharacterNameLocKey", "LocKey", "Objective", "description", "message", "name"],
+  "localization_paths": [
+    "ContentBranches[].actions[].CharacterNameLocKey",
+    "ContentBranches[].actions[].Dialogs.Entries[].LocKey",
+    "description",
+    "missionStages[].Objective",
+    "missionStages[].actions[].CharacterNameLocKey",
+    "missionStages[].actions[].Dialogs.Entries[].LocKey",
+    "missionStages[].actions[].message",
+    "missionStages[].description",
+    "missionStages[].name",
+    "name"
+  ],
+  "bodies": ["Kerbol", "Moho", "Eve", "Gilly", "Kerbin", "Mun", "Minmus", "Duna", "Ike", "Dres", "Jool", "Laythe", "Vall", "Tylo", "Bop", "Pol", "Eeloo", "Drast"],
+  "mission_types": [
+    "KSP.Game.Missions.ActivateMissionAction, Assembly-CSharp",
+    "KSP.Game.Missions.ConditionSet, Assembly-CSharp",
+    "KSP.Game.Missions.EventCondition, Assembly-CSharp",
+    "KSP.Game.Missions.MessageBoxAction, Assembly-CSharp",
+    "KSP.Game.Missions.MissionCharacterDialogAction, Assembly-CSharp",
+    "KSP.Game.Missions.MissionResolutionAction, Assembly-CSharp",
+    "KSP.Game.Missions.PropertyCondition, Assembly-CSharp"
+  ],
+  "bundled_mission_ids": [
+    "KSP2Mission_Secondary_Bop_LandCrater", "KSP2Mission_Secondary_Bop_OrbitHydrogen", "KSP2Mission_Secondary_Drast_Beyl",
+    "KSP2Mission_Secondary_Dres_Rover", "KSP2Mission_Secondary_Drill_Exercise", "KSP2Mission_Secondary_Eeloo_ISRU",
+    "KSP2Mission_Secondary_Ike_DestroyProbe", "KSP2Mission_Secondary_Jool_TourLand", "KSP2Mission_Secondary_Kerbin_EVAGround", "KSP2Mission_Secondary_Kerbin_EVASpace",
+    "KSP2Mission_Secondary_Kerbin_KerbinTourLanding", "KSP2Mission_Secondary_Kerbin_KerbinTourSOI", "KSP2Mission_Secondary_Kerbin_OrbitInclination",
+    "KSP2Mission_Secondary_Kerbol_DestroyProbe", "KSP2Mission_Secondary_Kerbol_GrandTour", "KSP2Mission_Secondary_Kerbol_OrbitLow",
+    "KSP2Mission_Secondary_Laythe_DestroyProbe", "KSP2Mission_Secondary_Minmus_DestroyProbe", "KSP2Mission_Secondary_Mun_OrbitInclination",
+    "KSP2Mission_Secondary_Tier_1_Gateway", "KSP2Mission_Secondary_Tier_2_Gateway", "KSP2Mission_Secondary_Tier_3_Gateway",
+    "KSP2Mission_Secondary_Tylo_LandHeavy", "KSP2Mission_Secondary_Vall_Sounds_Of_Music"
+  ]
+}

@@ -1,0 +1,38 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
+
+class AuthorizationTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_admin_redirects_anonymous_users_to_oidc_login(): void
+    {
+        $this->get('/admin')->assertRedirect('/admin/login');
+    }
+
+    public function test_admin_rejects_a_user_without_the_publisher_group(): void
+    {
+        $user = User::factory()->create(['groups' => ['another-group']]);
+
+        $this->actingAs($user)->get('/admin')->assertForbidden();
+    }
+
+    public function test_publisher_can_open_the_admin_dashboard(): void
+    {
+        Http::fake();
+        $user = User::factory()->create(['groups' => [config('ota.auth.publisher_group')]]);
+
+        $this->actingAs($user)->get('/admin')->assertOk();
+    }
+
+    public function test_liveness_does_not_require_a_session_or_database_query(): void
+    {
+        $this->get('/health/live')->assertOk()->assertJson(['status' => 'ok']);
+    }
+}

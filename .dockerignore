@@ -1,0 +1,9 @@
+.git
+.env
+vendor
+node_modules
+storage/logs/*
+storage/app/ota-private/*
+database/database.sqlite
+tests
+bootstrap/cache/*.php
