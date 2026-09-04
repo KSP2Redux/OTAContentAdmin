@@ -26,7 +26,7 @@ services:
       QUEUE_CONNECTION: redis
       AUTHENTIK_ISSUER: https://sso.rendezvous.dev/application/o/redux-ota-admin/
       AUTHENTIK_REDIRECT_URI: https://ota-admin.rendezvous.dev/auth/callback
-      AUTHENTIK_PUBLISHER_GROUP: ksp2redux-ota-publishers
+      AUTHENTIK_PUBLISHER_GROUP: "Rendezvous Entertainment Content Managers"
       AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:?required}
       AUTHENTIK_CLIENT_SECRET_FILE: /run/secrets/ota_authentik_secret
       GITHUB_APP_ID: ${GITHUB_APP_ID:?required}
@@ -34,8 +34,9 @@ services:
       GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/ota_github_private_key
       WEBLATE_TOKEN_FILE: /run/secrets/ota_weblate_token
       GITLAB_TOKEN_FILE: /run/secrets/ota_gitlab_token
-    secrets: &app-secrets [ota_app_key, ota_db_password, ota_authentik_secret, ota_github_private_key, ota_weblate_token, ota_gitlab_token]
-    volumes: ["ota_uploads:/var/www/html/storage/app/ota-private"]
+    volumes: &app-volumes
+      - ota_uploads:/var/www/html/storage/app/ota-private
+      - ota_secrets:/run/secrets:ro
     networks: [internal, caddy_net]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
@@ -56,8 +57,7 @@ services:
     restart: unless-stopped
     command: ["php", "artisan", "queue:work", "--sleep=2", "--tries=1", "--timeout=3600"]
     environment: *app-environment
-    secrets: *app-secrets
-    volumes: ["ota_uploads:/var/www/html/storage/app/ota-private"]
+    volumes: *app-volumes
     networks: [internal]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
@@ -72,8 +72,7 @@ services:
     restart: unless-stopped
     command: ["php", "artisan", "schedule:work"]
     environment: *app-environment
-    secrets: *app-secrets
-    volumes: ["ota_uploads:/var/www/html/storage/app/ota-private"]
+    volumes: *app-volumes
     networks: [internal]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
@@ -86,8 +85,9 @@ services:
       POSTGRES_DB: ota_admin
       POSTGRES_USER: ota_admin
       POSTGRES_PASSWORD_FILE: /run/secrets/ota_db_password
-    secrets: [ota_db_password]
-    volumes: ["ota_postgres:/var/lib/postgresql/data"]
+    volumes:
+      - ota_postgres:/var/lib/postgresql/data
+      - ota_secrets:/run/secrets:ro
     networks: [internal]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ota_admin -d ota_admin"]
@@ -113,10 +113,6 @@ volumes:
   ota_postgres:
   ota_redis:
   ota_uploads:
-secrets:
-  ota_app_key: { external: true }
-  ota_db_password: { external: true }
-  ota_authentik_secret: { external: true }
-  ota_github_private_key: { external: true }
-  ota_weblate_token: { external: true }
-  ota_gitlab_token: { external: true }
+  ota_secrets:
+    external: true
+    name: ota-content-admin-secrets

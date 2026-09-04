@@ -6,7 +6,7 @@ GitHub hosts this application's source and container images. GitLab is only an i
 
 ## Implemented workflows
 
-- Authentik OIDC login with an independent `ksp2redux-ota-publishers` group check.
+- Authentik OIDC login with an independent `Rendezvous Entertainment Content Managers` group check.
 - Draft changesets for vessel and mission add, replace, delete, and reorder operations.
 - Private uploads, JSON inspection, lossless vessel normalization, compatibility validation, deterministic manifests, and atomic GitHub commits.
 - Missing mission localization-key discovery and English source-unit creation through Weblate.
@@ -33,7 +33,7 @@ Populate the integration settings in `.env` before using remote status or public
 
 ## Production setup
 
-`docker-compose.yml` defines the HTTP application, queue worker, scheduler, PostgreSQL, and Redis. The application joins the external `caddy_net` network and listens on container port 8080. Create these Docker secrets in Portainer before starting the stack:
+`docker-compose.yml` defines the HTTP application, queue worker, scheduler, PostgreSQL, and Redis. The application joins the external `caddy_net` network and listens on container port 8080. This Docker Standalone deployment uses the administrator-owned external volume `ota-content-admin-secrets`, mounted read-only at `/run/secrets`. Store these files in that volume before starting the stack:
 
 - `ota_app_key`
 - `ota_db_password`
@@ -49,6 +49,8 @@ The GitHub Actions workflow tests pull requests and pushes to `main`. A successf
 The Authentik provider must use authorization code with PKCE, asymmetric signing, issuer `https://sso.rendezvous.dev/application/o/redux-ota-admin/`, and exact callback `https://ota-admin.rendezvous.dev/auth/callback`. Request only `openid profile email`. Enforce the publisher group in Authentik as well as in this application.
 
 The GitHub App installation must be limited to `KSP2Redux/Content` with Metadata read and Contents read/write. The Weblate service account needs only KSP2Redux repository and source-unit operations. The GitLab project token needs only pipeline creation and status access.
+
+Restrict management of the secret volume to Portainer administrators. Never place its contents in the Git repository, stack environment variables, or the Portainer stack editor. Docker Standalone volumes are not encrypted Docker Swarm secrets, so access to the Docker host remains privileged access to these credentials.
 
 Rotate the GitHub and Outline credentials exposed during the earlier discovery session before any staging or production deployment.
 

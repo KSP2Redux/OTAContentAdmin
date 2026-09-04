@@ -2,7 +2,7 @@
 
 return [
     'auth' => [
-        'publisher_group' => env('AUTHENTIK_PUBLISHER_GROUP', 'ksp2redux-ota-publishers'),
+        'publisher_group' => env('AUTHENTIK_PUBLISHER_GROUP', 'Rendezvous Entertainment Content Managers'),
     ],
     'content' => [
         'owner' => env('GITHUB_CONTENT_OWNER', 'KSP2Redux'),
@@ -24,7 +24,7 @@ return [
         'timeout_seconds' => (int) env('WEBLATE_TIMEOUT_SECONDS', 600),
     ],
     'gitlab' => [
-        'url' => env('GITLAB_URL', 'https://gitlab.rendezvous.dev/api/v4'),
+        'url' => env('GITLAB_URL', 'https://git.rendezvous.dev/api/v4'),
         'token' => env('GITLAB_TOKEN'),
         'project_id' => env('GITLAB_PROJECT_ID', '9'),
         'ref' => env('GITLAB_OTA_REF', 'develop'),
