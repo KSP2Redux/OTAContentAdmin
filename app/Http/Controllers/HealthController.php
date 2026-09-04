@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Integrations\GitHubContentRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -21,7 +22,7 @@ class HealthController extends Controller
         $checks['database'] = $this->check(fn () => DB::select('select 1'));
         $checks['redis'] = $this->check(fn () => Redis::connection()->command('ping'));
         $checks['authentik'] = $this->check(fn () => Http::timeout(5)->get(rtrim(config('services.openidconnect.base_url'), '/').'/.well-known/openid-configuration')->throw());
-        $checks['github'] = $this->check(fn () => Http::timeout(5)->get('https://api.github.com/repos/'.config('ota.content.owner').'/'.config('ota.content.repo'))->throw());
+        $checks['github'] = $this->check(fn () => app(GitHubContentRepository::class)->headSha(true));
         $checks['weblate'] = $this->check(fn () => Http::timeout(5)->withToken(config('ota.weblate.token'))->get(rtrim(config('ota.weblate.url'), '/').'/projects/'.config('ota.weblate.project').'/')->throw());
         $checks['gitlab'] = $this->check(fn () => Http::timeout(5)->withHeaders(['PRIVATE-TOKEN' => config('ota.gitlab.token')])->get(rtrim(config('ota.gitlab.url'), '/').'/version')->throw());
         $ready = ! in_array('failed', $checks, true);
