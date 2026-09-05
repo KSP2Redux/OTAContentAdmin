@@ -15,7 +15,7 @@
     "missionStages[].name",
     "name"
   ],
-  "bodies": ["Kerbol", "Moho", "Eve", "Gilly", "Kerbin", "Mun", "Minmus", "Duna", "Ike", "Dres", "Jool", "Laythe", "Vall", "Tylo", "Bop", "Pol", "Eeloo", "Drast"],
+  "bodies": ["Kerbol", "Moho", "Eve", "Gilly", "Kerbin", "Mun", "Minmus", "Duna", "Ike", "Dres", "Drast", "Beyl", "Jool", "Laythe", "Vall", "Tylo", "Bop", "Pol", "Eeloo"],
   "mission_types": [
     "KSP.Game.Missions.ActivateMissionAction, Assembly-CSharp",
     "KSP.Game.Missions.ConditionSet, Assembly-CSharp",

@@ -13,6 +13,14 @@ use Tests\TestCase;
 
 class ContentHandlersTest extends TestCase
 {
+    public function test_compatibility_catalog_lists_dres_and_its_moons_together(): void
+    {
+        $bodies = app(CompatibilityCatalog::class)->bodies();
+
+        $this->assertContains('Beyl', $bodies);
+        $this->assertSame(['Dres', 'Drast', 'Beyl'], array_slice($bodies, array_search('Dres', $bodies, true), 3));
+    }
+
     public function test_lossless_normalizer_drops_object_nulls_and_preserves_number_spelling(): void
     {
         $json = '{ "position": 1.2300, "nothing": null, "items": [null, 2e-3], "type": "Thing, Assembly, Version=1.2.3.4, Culture=neutral, PublicKeyToken=null" }';
