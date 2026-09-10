@@ -6,6 +6,7 @@ use App\Filament\Resources\ChangeSets\Pages\CreateChangeSet;
 use App\Filament\Resources\ChangeSets\Pages\EditChangeSet;
 use App\Filament\Resources\ChangeSets\Pages\ListChangeSets;
 use App\Filament\Resources\ChangeSets\Pages\ViewChangeSet;
+use App\Filament\Resources\ChangeSets\RelationManagers\ChangeOperationsRelationManager;
 use App\Filament\Resources\ChangeSets\Schemas\ChangeSetForm;
 use App\Filament\Resources\ChangeSets\Schemas\ChangeSetInfolist;
 use App\Filament\Resources\ChangeSets\Tables\ChangeSetsTable;
@@ -44,7 +45,7 @@ class ChangeSetResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ChangeOperationsRelationManager::class,
         ];
     }
 
