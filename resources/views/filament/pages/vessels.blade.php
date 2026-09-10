@@ -22,6 +22,7 @@
                     <th scope="col">Bounds</th>
                     <th scope="col" class="ota-table-number">Bytes</th>
                     <th scope="col">SHA-256</th>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -41,10 +42,20 @@
                         <td>
                             <code class="ota-table-code ota-table-hash" title="{{ $item['sha256'] }}">{{ $item['sha256'] }}</code>
                         </td>
+                        <td>
+                            <a
+                                class="ota-table-download"
+                                href="{{ route('content.download', ['channel' => 'main-menu-vessels', 'path' => $item['path']]) }}"
+                                title="Download {{ $item['path'] }}"
+                            >
+                                <x-filament::icon icon="heroicon-m-arrow-down-tray" class="size-4" />
+                                <span>Download</span>
+                            </a>
+                        </td>
                     </tr>
                 @empty
                     <tr class="ota-table-empty">
-                        <td colspan="10">No vessels could be loaded.</td>
+                        <td colspan="11">No vessels could be loaded.</td>
                     </tr>
                 @endforelse
             </tbody>

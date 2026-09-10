@@ -97,6 +97,76 @@ class AuthorizationTest extends TestCase
             ->assertSee('Published OTA missions · loaded with campaigns');
     }
 
+    public function test_published_vessel_and_mission_lists_offer_verified_downloads(): void
+    {
+        $rawUrl = rtrim(config('ota.content.raw_url'), '/');
+        $vessel = '{"Metadata":{"WorkspaceName":"Test Craft","Mass":1.5,"Parts":1},"Assemblies":[{"boundsSize":{"x":1,"y":2,"z":3},"Parts":[{"id":"one"}]}]}';
+        $mission = '{"ID":"KSP2Mission_Test","MissionGroup":"Test","missionStages":[{"StageID":0}]}';
+        Http::fake([
+            "{$rawUrl}/main-menu-vessels/manifest.json" => Http::response(['files' => [[
+                'path' => 'test-craft.json',
+                'order' => 1,
+                'author' => 'Tester',
+                'body' => 'Kerbin',
+                'bytes' => strlen($vessel),
+                'sha256' => hash('sha256', $vessel),
+            ]]]),
+            "{$rawUrl}/main-menu-vessels/test-craft.json" => Http::response($vessel),
+            "{$rawUrl}/missions/manifest.json" => Http::response(['files' => [[
+                'path' => 'ksp2mission-test.json',
+                'order' => 1,
+                'bytes' => strlen($mission),
+                'sha256' => hash('sha256', $mission),
+            ]]]),
+            "{$rawUrl}/missions/ksp2mission-test.json" => Http::response($mission),
+        ]);
+        $user = User::factory()->create(['groups' => [config('ota.auth.publisher_group')]]);
+
+        $vesselDownload = route('content.download', ['channel' => 'main-menu-vessels', 'path' => 'test-craft.json']);
+        $missionDownload = route('content.download', ['channel' => 'missions', 'path' => 'ksp2mission-test.json']);
+
+        $this->actingAs($user)->get('/admin/vessels')
+            ->assertOk()
+            ->assertSee($vesselDownload)
+            ->assertSee('Download test-craft.json');
+
+        $this->actingAs($user)->get('/admin/missions')
+            ->assertOk()
+            ->assertSee($missionDownload)
+            ->assertSee('Download ksp2mission-test.json');
+
+        $this->actingAs($user)->get($vesselDownload)
+            ->assertOk()
+            ->assertHeader('Content-Disposition', 'attachment; filename="test-craft.json"')
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertContent($vessel);
+
+        $this->actingAs($user)->get($missionDownload)
+            ->assertOk()
+            ->assertHeader('Content-Disposition', 'attachment; filename="ksp2mission-test.json"')
+            ->assertContent($mission);
+    }
+
+    public function test_downloads_reject_non_publishers_and_manifest_mismatches(): void
+    {
+        $rawUrl = rtrim(config('ota.content.raw_url'), '/');
+        Http::fake([
+            "{$rawUrl}/missions/manifest.json" => Http::response(['files' => [[
+                'path' => 'test.json',
+                'bytes' => 2,
+                'sha256' => hash('sha256', '{}'),
+            ]]]),
+            "{$rawUrl}/missions/test.json" => Http::response('{"changed":true}'),
+        ]);
+        $download = route('content.download', ['channel' => 'missions', 'path' => 'test.json']);
+
+        $nonPublisher = User::factory()->create(['groups' => ['another-group']]);
+        $this->actingAs($nonPublisher)->get($download)->assertForbidden();
+
+        $publisher = User::factory()->create(['groups' => [config('ota.auth.publisher_group')]]);
+        $this->actingAs($publisher)->get($download)->assertStatus(502);
+    }
+
     public function test_system_status_uses_labeled_summaries_instead_of_raw_json(): void
     {
         Cache::put('github-app-token', 'test-github-token');

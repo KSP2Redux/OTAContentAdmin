@@ -18,6 +18,7 @@
                     <th scope="col">Group</th>
                     <th scope="col" class="ota-table-number">Stages</th>
                     <th scope="col" class="ota-table-number">Localization keys</th>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -31,10 +32,20 @@
                         <td>{{ $item['group'] }}</td>
                         <td class="ota-table-number">{{ number_format($item['stages']) }}</td>
                         <td class="ota-table-number">{{ number_format(count($item['localization_keys'])) }}</td>
+                        <td>
+                            <a
+                                class="ota-table-download"
+                                href="{{ route('content.download', ['channel' => 'missions', 'path' => $item['path']]) }}"
+                                title="Download {{ $item['path'] }}"
+                            >
+                                <x-filament::icon icon="heroicon-m-arrow-down-tray" class="size-4" />
+                                <span>Download</span>
+                            </a>
+                        </td>
                     </tr>
                 @empty
                     <tr class="ota-table-empty">
-                        <td colspan="6">No OTA missions are currently published.</td>
+                        <td colspan="7">No OTA missions are currently published.</td>
                     </tr>
                 @endforelse
             </tbody>
