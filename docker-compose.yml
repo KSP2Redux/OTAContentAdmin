@@ -2,7 +2,7 @@ services:
   upload-init:
     image: busybox:1.37
     restart: "no"
-    command: ["sh", "-c", "chown -R 33:33 /uploads /payloads && chmod 0770 /uploads /payloads"]
+    command: ["sh", "-c", "chown -R 0:33 /uploads /payloads && chmod 0770 /uploads /payloads"]
     volumes:
       - ota_uploads:/uploads
       - ota_payloads:/payloads
