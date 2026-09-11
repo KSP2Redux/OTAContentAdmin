@@ -49,7 +49,8 @@ class ChangeSetEditingTest extends TestCase
     public function test_removing_a_staged_change_deletes_its_payload_and_invalidates_validation(): void
     {
         Storage::persistentFake('ota-private');
-        Storage::disk('ota-private')->put('drafts/vessels/test-craft.json', '{}');
+        Storage::persistentFake('ota-payloads');
+        Storage::disk('ota-payloads')->put('drafts/change-sets/test/main-menu-vessels/test-craft.json', '{}');
         $user = User::factory()->create(['groups' => [config('ota.auth.publisher_group')]]);
         $changeSet = ChangeSet::create([
             'user_id' => $user->id,
@@ -62,7 +63,7 @@ class ChangeSetEditingTest extends TestCase
             'channel' => 'main-menu-vessels',
             'action' => 'replace',
             'path' => 'test-craft.json',
-            'payload_path' => 'drafts/vessels/test-craft.json',
+            'payload_path' => 'drafts/change-sets/test/main-menu-vessels/test-craft.json',
         ]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
 
@@ -80,7 +81,7 @@ class ChangeSetEditingTest extends TestCase
             'state' => 'draft',
             'validation_report' => null,
         ]);
-        Storage::disk('ota-private')->assertMissing('drafts/vessels/test-craft.json');
+        Storage::disk('ota-payloads')->assertMissing('drafts/change-sets/test/main-menu-vessels/test-craft.json');
     }
 
     public function test_published_changes_cannot_be_removed(): void

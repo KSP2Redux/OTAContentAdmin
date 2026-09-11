@@ -10,11 +10,11 @@ use App\Services\Integrations\WeblateClient;
 use App\Services\Publishing\ChangeSetValidator;
 use App\Services\Publishing\ContentPublisher;
 use App\Services\Publishing\LocalizationPublisher;
+use App\Services\Publishing\PayloadStorage;
 use App\Support\SecretRedactor;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -30,7 +30,7 @@ class PublishChangeSet implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(ContentPublisher $publisher, ChangeSetValidator $validator, LocalizationPublisher $localizations, ContentHandlerRegistry $handlers, WeblateClient $weblate): void
+    public function handle(ContentPublisher $publisher, ChangeSetValidator $validator, LocalizationPublisher $localizations, ContentHandlerRegistry $handlers, WeblateClient $weblate, PayloadStorage $payloads): void
     {
         $run = PublishRun::findOrFail($this->publishRunId);
         $changeSet = ChangeSet::findOrFail($this->changeSetId);
@@ -48,7 +48,7 @@ class PublishChangeSet implements ShouldQueue
             if ($hasMissionSources) {
                 foreach ($changeSet->operations()->where('channel', 'missions')->whereNotNull('payload_path')->get() as $operation) {
                     $sources = array_filter((array) ($operation->metadata['localization_sources'] ?? []));
-                    $artifact = new UploadedArtifact($operation->path, Storage::disk('ota-private')->get($operation->payload_path), $operation->metadata ?? []);
+                    $artifact = new UploadedArtifact($operation->path, $payloads->get($operation->payload_path), $operation->metadata ?? []);
                     $keys = $handlers->for('missions')->inspect($artifact)->metadata['localization_keys'] ?? [];
                     $missing = $weblate->missingMissionSourceKeys($keys);
                     $unresolved = array_diff($missing, array_keys($sources));

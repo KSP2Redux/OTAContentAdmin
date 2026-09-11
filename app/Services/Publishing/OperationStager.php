@@ -15,7 +15,7 @@ use Throwable;
 
 final readonly class OperationStager
 {
-    public function __construct(private GitHubContentRepository $github, private ContentHandlerRegistry $handlers) {}
+    public function __construct(private GitHubContentRepository $github, private ContentHandlerRegistry $handlers, private PayloadStorage $payloads) {}
 
     public function stage(string $channel, string $action, array $data): ChangeOperation
     {
@@ -59,7 +59,7 @@ final readonly class OperationStager
             throw new RuntimeException('The selected item no longer exists.');
         }
         if ($ownedPayloadPath !== null && $contents !== null) {
-            Storage::disk('ota-private')->put($ownedPayloadPath, $contents);
+            $this->payloads->put($ownedPayloadPath, $contents);
         }
         $existingOperation = ChangeOperation::query()
             ->where('change_set_id', $changeSet->id)
@@ -78,14 +78,14 @@ final readonly class OperationStager
                 );
             });
         } catch (Throwable $exception) {
-            $this->discardPayload($ownedPayloadPath);
+            $this->payloads->delete($ownedPayloadPath);
 
             throw $exception;
         }
 
         $this->discardPayload($uploadedPayloadPath);
         if ($replacedPayloadPath !== $payloadPath && ! ChangeOperation::query()->where('payload_path', $replacedPayloadPath)->exists()) {
-            $this->discardPayload($replacedPayloadPath);
+            $this->payloads->delete($replacedPayloadPath);
         }
 
         return $operation;

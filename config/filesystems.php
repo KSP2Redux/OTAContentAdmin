@@ -37,6 +37,13 @@ return [
             'throw' => true,
         ],
 
+        'ota-payloads' => [
+            'driver' => 'local',
+            'root' => storage_path('app/ota-payloads'),
+            'serve' => false,
+            'throw' => true,
+        ],
+
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),

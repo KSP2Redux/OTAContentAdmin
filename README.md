@@ -33,7 +33,7 @@ Populate the integration settings in `.env` before using remote status or public
 
 ## Production setup
 
-`docker-compose.yml` defines the HTTP application, queue worker, scheduler, PostgreSQL, and Redis. The application joins the external `caddy_net` network and listens on container port 8080. This Docker Standalone deployment uses the administrator-owned external volume `ota-content-admin-secrets`, mounted read-only at `/run/secrets`. Store these files in that volume before starting the stack:
+`docker-compose.yml` defines the HTTP application, queue worker, scheduler, PostgreSQL, and Redis. The application joins the external `caddy_net` network and listens on container port 8080. Temporary Filament uploads and durable change-set payloads use separate private Docker volumes so upload cleanup cannot remove queued publication data. This Docker Standalone deployment uses the administrator-owned external volume `ota-content-admin-secrets`, mounted read-only at `/run/secrets`. Store these files in that volume before starting the stack:
 
 - `ota_app_key`
 - `ota_db_password`

@@ -5,13 +5,12 @@ namespace App\Services\Publishing;
 use App\Models\ChangeOperation;
 use App\Models\ChangeSet;
 use App\Services\Integrations\GitHubContentRepository;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 final readonly class RollbackService
 {
-    public function __construct(private GitHubContentRepository $github) {}
+    public function __construct(private GitHubContentRepository $github, private PayloadStorage $payloads) {}
 
     public function createInverse(ChangeSet $published, int $actorId): ChangeSet
     {
@@ -50,7 +49,7 @@ final readonly class RollbackService
                 $payloadPath = null;
                 if (in_array($action, ['add', 'replace'], true)) {
                     $payloadPath = 'drafts/rollbacks/'.$inverse->id.'/'.Str::uuid().'.json';
-                    Storage::disk('ota-private')->put($payloadPath, $this->github->fileAtRef($operation->channel, $operation->path, $published->base_content_sha));
+                    $this->payloads->put($payloadPath, $this->github->fileAtRef($operation->channel, $operation->path, $published->base_content_sha));
                 }
                 $metadata = $before ? array_merge($operation->metadata ?? [], array_intersect_key($before, array_flip(['author', 'body']))) : ($operation->metadata ?? []);
                 ChangeOperation::create([

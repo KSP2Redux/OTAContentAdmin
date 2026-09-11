@@ -8,7 +8,6 @@ use App\Services\Content\Data\ChangeSetContext;
 use App\Services\Content\Data\UploadedArtifact;
 use App\Services\Integrations\GitHubContentRepository;
 use App\Services\Integrations\WeblateClient;
-use Illuminate\Support\Facades\Storage;
 
 final readonly class ChangeSetValidator
 {
@@ -16,6 +15,7 @@ final readonly class ChangeSetValidator
         private GitHubContentRepository $github,
         private ContentHandlerRegistry $handlers,
         private WeblateClient $weblate,
+        private PayloadStorage $payloads,
     ) {}
 
     /** @return array{valid: bool, errors: array<string>, warnings: array<string>, operations: array<string, mixed>} */
@@ -56,13 +56,13 @@ final readonly class ChangeSetValidator
                     continue;
                 }
 
-                if (! is_string($operation->payload_path) || ! Storage::disk('ota-private')->exists($operation->payload_path)) {
+                if (! is_string($operation->payload_path) || ! $this->payloads->exists($operation->payload_path)) {
                     $errors[] = "{$channel}/{$operation->path} no longer has its staged upload. Remove this change and add it again.";
 
                     continue;
                 }
 
-                $contents = Storage::disk('ota-private')->get($operation->payload_path);
+                $contents = $this->payloads->get($operation->payload_path);
                 $totalBytes += strlen($contents);
                 $artifact = new UploadedArtifact($operation->path, $contents, $operation->metadata ?? []);
                 $handler = $this->handlers->for($channel);
@@ -113,11 +113,11 @@ final readonly class ChangeSetValidator
             }
         }
         foreach ($changeSet->operations->where('channel', 'missions')->whereNotIn('action', ['delete', 'reorder']) as $operation) {
-            if (! is_string($operation->payload_path) || ! Storage::disk('ota-private')->exists($operation->payload_path)) {
+            if (! is_string($operation->payload_path) || ! $this->payloads->exists($operation->payload_path)) {
                 continue;
             }
 
-            $data = json_decode(Storage::disk('ota-private')->get($operation->payload_path), true);
+            $data = json_decode($this->payloads->get($operation->payload_path), true);
             if (is_string($data['ID'] ?? null)) {
                 $ids[] = $data['ID'];
             }

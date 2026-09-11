@@ -9,12 +9,11 @@ use App\Services\Content\Data\ChannelSnapshot;
 use App\Services\Content\Data\UploadedArtifact;
 use App\Services\Integrations\GitHubContentRepository;
 use App\Services\Integrations\WeblateClient;
-use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 final readonly class ContentPublisher
 {
-    public function __construct(private GitHubContentRepository $github, private ContentHandlerRegistry $handlers, private WeblateClient $weblate) {}
+    public function __construct(private GitHubContentRepository $github, private ContentHandlerRegistry $handlers, private WeblateClient $weblate, private PayloadStorage $payloads) {}
 
     public function publish(ChangeSet $changeSet, int $unrelatedHeadRetries = 1): string
     {
@@ -62,7 +61,7 @@ final readonly class ContentPublisher
                     continue;
                 }
 
-                $contents = Storage::disk('ota-private')->get($operation->payload_path);
+                $contents = $this->payloads->get($operation->payload_path);
                 $artifact = new UploadedArtifact($operation->path, $contents, $operation->metadata ?? []);
                 $report = $handler->validate(new ChangeSetContext($artifact, $manifest, $candidateIds));
                 $reports["{$channel}/{$operation->path}"] = $report->toArray();
@@ -132,7 +131,7 @@ final readonly class ContentPublisher
             if (! $operation->payload_path) {
                 continue;
             }
-            $data = json_decode(Storage::disk('ota-private')->get($operation->payload_path), true);
+            $data = json_decode($this->payloads->get($operation->payload_path), true);
             if (is_string($data['ID'] ?? null)) {
                 $ids[] = $data['ID'];
             }

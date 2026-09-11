@@ -2,9 +2,10 @@ services:
   upload-init:
     image: busybox:1.37
     restart: "no"
-    command: ["sh", "-c", "chown -R 33:33 /data && chmod 0770 /data"]
+    command: ["sh", "-c", "chown -R 33:33 /uploads /payloads && chmod 0770 /uploads /payloads"]
     volumes:
-      - ota_uploads:/data
+      - ota_uploads:/uploads
+      - ota_payloads:/payloads
     network_mode: none
     read_only: true
     security_opt: ["no-new-privileges:true"]
@@ -46,6 +47,7 @@ services:
       GITLAB_TOKEN_FILE: /run/secrets/ota_gitlab_token
     volumes: &app-volumes
       - ota_uploads:/var/www/html/storage/app/ota-private
+      - ota_payloads:/var/www/html/storage/app/ota-payloads
       - ota_secrets:/run/secrets:ro
     networks: [internal, caddy_net]
     security_opt: ["no-new-privileges:true"]
@@ -127,6 +129,7 @@ volumes:
   ota_postgres:
   ota_redis:
   ota_uploads:
+  ota_payloads:
   ota_secrets:
     external: true
     name: ota-content-admin-secrets

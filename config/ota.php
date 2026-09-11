@@ -31,6 +31,11 @@ return [
         'job' => env('GITLAB_OTA_JOB', 'publish-ota-content'),
         'timeout_seconds' => (int) env('GITLAB_TIMEOUT_SECONDS', 1800),
     ],
+    'storage' => [
+        'upload_disk' => env('OTA_UPLOAD_DISK', 'ota-private'),
+        'payload_disk' => env('OTA_PAYLOAD_DISK', 'ota-payloads'),
+        'legacy_payload_disk' => env('OTA_LEGACY_PAYLOAD_DISK', 'ota-private'),
+    ],
     'limits' => ['vessel' => 10 * 1024 * 1024, 'mission' => 2 * 1024 * 1024, 'change_set' => 50 * 1024 * 1024],
     'compatibility_path' => resource_path('compatibility/ota-authoring.json'),
 ];

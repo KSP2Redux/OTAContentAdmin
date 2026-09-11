@@ -5,11 +5,12 @@ namespace App\Services\Publishing;
 use App\Models\ChangeOperation;
 use App\Models\ChangeSet;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 final class ChangeOperationRemover
 {
+    public function __construct(private readonly PayloadStorage $payloads) {}
+
     public function remove(ChangeOperation $operation): void
     {
         $payloadPath = $operation->payload_path;
@@ -34,7 +35,7 @@ final class ChangeOperationRemover
         });
 
         if (is_string($payloadPath) && $payloadPath !== '' && ! ChangeOperation::query()->where('payload_path', $payloadPath)->exists()) {
-            Storage::disk('ota-private')->delete($payloadPath);
+            $this->payloads->delete($payloadPath);
         }
     }
 }
