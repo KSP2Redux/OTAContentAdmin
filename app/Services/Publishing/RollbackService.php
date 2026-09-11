@@ -19,16 +19,17 @@ final readonly class RollbackService
         }
 
         $published->load('operations');
+        $currentHead = $this->github->headSha(true);
         $inverse = ChangeSet::create([
             'user_id' => $actorId,
-            'base_content_sha' => $this->github->headSha(),
+            'base_content_sha' => $currentHead,
             'state' => 'draft',
             'summary' => "Rollback: {$published->summary}",
         ]);
 
         try {
             foreach ($published->operations as $operation) {
-                $currentManifest = $this->github->manifest($operation->channel);
+                $currentManifest = $this->github->manifestAtRef($operation->channel, $currentHead);
                 $publishedManifest = $this->github->manifestAtRef($operation->channel, $published->published_sha);
                 $baseManifest = $this->github->manifestAtRef($operation->channel, $published->base_content_sha);
                 $current = collect($currentManifest['files'] ?? [])->firstWhere('path', $operation->path);
