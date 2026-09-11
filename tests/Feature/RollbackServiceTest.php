@@ -56,9 +56,14 @@ class RollbackServiceTest extends TestCase
         ]);
 
         $inverse = app(RollbackService::class)->createInverse($published, $user->id);
+        $operation = $inverse->operations()->sole();
 
         $this->assertSame('current-head', $inverse->base_content_sha);
-        $this->assertSame('delete', $inverse->operations()->sole()->action);
+        $this->assertSame('delete', $operation->action);
+        $this->assertSame(
+            hash('sha256', json_encode(['files' => [$entry]], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)),
+            $operation->metadata['_base_manifest_sha256'],
+        );
         $this->assertContains(
             'https://api.github.com/repos/KSP2Redux/Content/contents/main-menu-vessels/manifest.json?ref=current-head',
             $requests,

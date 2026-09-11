@@ -53,6 +53,7 @@ final readonly class RollbackService
                     $this->payloads->put($payloadPath, $this->github->fileAtRef($operation->channel, $operation->path, $published->base_content_sha));
                 }
                 $metadata = $before ? array_merge($operation->metadata ?? [], array_intersect_key($before, array_flip(['author', 'body']))) : ($operation->metadata ?? []);
+                $metadata['_base_manifest_sha256'] = hash('sha256', json_encode($currentManifest, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
                 ChangeOperation::create([
                     'change_set_id' => $inverse->id,
                     'channel' => $operation->channel,
