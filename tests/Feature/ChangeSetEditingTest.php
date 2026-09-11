@@ -48,7 +48,7 @@ class ChangeSetEditingTest extends TestCase
 
     public function test_removing_a_staged_change_deletes_its_payload_and_invalidates_validation(): void
     {
-        Storage::fake('ota-private');
+        Storage::persistentFake('ota-private');
         Storage::disk('ota-private')->put('drafts/vessels/test-craft.json', '{}');
         $user = User::factory()->create(['groups' => [config('ota.auth.publisher_group')]]);
         $changeSet = ChangeSet::create([

@@ -7,9 +7,11 @@ use App\Models\ChangeSet;
 use App\Services\Content\ContentHandlerRegistry;
 use App\Services\Content\Data\UploadedArtifact;
 use App\Services\Integrations\GitHubContentRepository;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 final readonly class OperationStager
 {
@@ -21,14 +23,17 @@ final readonly class OperationStager
         $manifest = $this->github->manifest($channel);
         $path = $data['path'] ?? null;
         $metadata = $data['metadata'] ?? [];
+        $uploadedPayloadPath = null;
+        $ownedPayloadPath = null;
+        $contents = null;
         $metadata['_base_manifest_sha256'] = hash('sha256', json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         if (! in_array($action, ['delete', 'reorder'], true)) {
-            $payloadPath = $data['upload'];
+            $uploadedPayloadPath = $data['upload'];
             $expectedDirectory = $channel === 'main-menu-vessels' ? 'drafts/vessels/' : 'drafts/missions/';
-            if (! is_string($payloadPath) || ! str_starts_with($payloadPath, $expectedDirectory) || str_contains($payloadPath, '..') || str_contains($payloadPath, '\\') || ! Storage::disk('ota-private')->exists($payloadPath)) {
+            if (! is_string($uploadedPayloadPath) || ! str_starts_with($uploadedPayloadPath, $expectedDirectory) || str_contains($uploadedPayloadPath, '..') || str_contains($uploadedPayloadPath, '\\') || ! Storage::disk('ota-private')->exists($uploadedPayloadPath)) {
                 throw new RuntimeException('The uploaded payload path is invalid. Upload the file again.');
             }
-            $contents = Storage::disk('ota-private')->get($payloadPath);
+            $contents = Storage::disk('ota-private')->get($uploadedPayloadPath);
             if ($channel === 'missions' && ! $path) {
                 $id = json_decode($contents, true, 128, JSON_THROW_ON_ERROR)['ID'] ?? throw new RuntimeException('Mission ID is required.');
                 $path = Str::slug($id).'.json';
@@ -38,6 +43,8 @@ final readonly class OperationStager
             }
             $inspection = $this->handlers->for($channel)->inspect(new UploadedArtifact($path, $contents, $metadata));
             $metadata['inspection'] = $inspection->metadata;
+            $ownedPayloadPath = 'drafts/change-sets/'.$changeSet->id.'/'.$channel.'/'.Str::uuid().'.json';
+            $payloadPath = $ownedPayloadPath;
         } else {
             $payloadPath = null;
         }
@@ -51,11 +58,49 @@ final readonly class OperationStager
         if (in_array($action, ['replace', 'delete', 'reorder'], true) && ! $live) {
             throw new RuntimeException('The selected item no longer exists.');
         }
-        $changeSet->update(['state' => 'draft', 'validation_report' => null]);
+        if ($ownedPayloadPath !== null && $contents !== null) {
+            Storage::disk('ota-private')->put($ownedPayloadPath, $contents);
+        }
+        $existingOperation = ChangeOperation::query()
+            ->where('change_set_id', $changeSet->id)
+            ->where('channel', $channel)
+            ->where('path', $path)
+            ->first();
+        $replacedPayloadPath = $existingOperation?->payload_path;
 
-        return ChangeOperation::query()->updateOrCreate(
-            ['change_set_id' => $changeSet->id, 'channel' => $channel, 'path' => $path],
-            ['action' => $action, 'original_sha' => $live['sha256'] ?? null, 'payload_path' => $payloadPath, 'metadata' => $metadata, 'order_position' => $data['order_position'] ?? ($live['order'] ?? null)],
-        );
+        try {
+            $operation = DB::transaction(function () use ($changeSet, $channel, $path, $action, $live, $payloadPath, $metadata, $data): ChangeOperation {
+                $changeSet->update(['state' => 'draft', 'validation_report' => null]);
+
+                return ChangeOperation::query()->updateOrCreate(
+                    ['change_set_id' => $changeSet->id, 'channel' => $channel, 'path' => $path],
+                    ['action' => $action, 'original_sha' => $live['sha256'] ?? null, 'payload_path' => $payloadPath, 'metadata' => $metadata, 'order_position' => $data['order_position'] ?? ($live['order'] ?? null)],
+                );
+            });
+        } catch (Throwable $exception) {
+            $this->discardPayload($ownedPayloadPath);
+
+            throw $exception;
+        }
+
+        $this->discardPayload($uploadedPayloadPath);
+        if ($replacedPayloadPath !== $payloadPath && ! ChangeOperation::query()->where('payload_path', $replacedPayloadPath)->exists()) {
+            $this->discardPayload($replacedPayloadPath);
+        }
+
+        return $operation;
+    }
+
+    private function discardPayload(?string $path): void
+    {
+        if (! is_string($path) || $path === '') {
+            return;
+        }
+
+        try {
+            Storage::disk('ota-private')->delete($path);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 }
