@@ -2,7 +2,7 @@ services:
   upload-init:
     image: busybox:1.37
     restart: "no"
-    command: ["sh", "-c", "chown -R 0:33 /uploads /payloads && chmod 0770 /uploads /payloads"]
+    command: ["sh", "-c", "chgrp -R 33 /uploads /payloads && chmod -R g+rwX,o-rwx /uploads /payloads && chmod 2770 /uploads /payloads"]
     volumes:
       - ota_uploads:/uploads
       - ota_payloads:/payloads
@@ -69,6 +69,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     command: ["php", "artisan", "queue:work", "--sleep=2", "--tries=1", "--timeout=3600"]
+    user: "0:33"
     environment: *app-environment
     volumes: *app-volumes
     networks: [internal]
@@ -85,6 +86,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     command: ["php", "artisan", "schedule:work"]
+    user: "0:33"
     environment: *app-environment
     volumes: *app-volumes
     networks: [internal]

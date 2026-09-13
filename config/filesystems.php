@@ -35,6 +35,10 @@ return [
             'root' => storage_path('app/ota-private'),
             'serve' => false,
             'throw' => true,
+            'permissions' => [
+                'file' => ['public' => 0660, 'private' => 0660],
+                'dir' => ['public' => 0770, 'private' => 0770],
+            ],
         ],
 
         'ota-payloads' => [
@@ -42,6 +46,10 @@ return [
             'root' => storage_path('app/ota-payloads'),
             'serve' => false,
             'throw' => true,
+            'permissions' => [
+                'file' => ['public' => 0660, 'private' => 0660],
+                'dir' => ['public' => 0770, 'private' => 0770],
+            ],
         ],
 
         'local' => [

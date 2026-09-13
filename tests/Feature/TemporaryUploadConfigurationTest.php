@@ -12,6 +12,8 @@ class TemporaryUploadConfigurationTest extends TestCase
         $this->assertSame('ota-private', config('livewire.temporary_file_upload.disk'));
         $this->assertSame('livewire-tmp', config('livewire.temporary_file_upload.directory'));
         $this->assertContains('max:10240', config('livewire.temporary_file_upload.rules'));
+        $this->assertSame(0660, config('filesystems.disks.ota-private.permissions.file.private'));
+        $this->assertSame(0770, config('filesystems.disks.ota-private.permissions.dir.private'));
 
         Storage::fake('ota-private');
         Storage::disk(config('livewire.temporary_file_upload.disk'))

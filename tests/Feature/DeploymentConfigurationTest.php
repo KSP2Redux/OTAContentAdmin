@@ -10,8 +10,10 @@ class DeploymentConfigurationTest extends TestCase
     {
         $compose = file_get_contents(base_path('docker-compose.yml'));
 
-        $this->assertStringContainsString('chown -R 0:33 /uploads /payloads', $compose);
-        $this->assertStringContainsString('chmod 0770 /uploads /payloads', $compose);
+        $this->assertStringContainsString('chgrp -R 33 /uploads /payloads', $compose);
+        $this->assertStringContainsString('chmod -R g+rwX,o-rwx /uploads /payloads', $compose);
+        $this->assertStringContainsString('chmod 2770 /uploads /payloads', $compose);
+        $this->assertSame(2, substr_count($compose, '    user: "0:33"'));
         $this->assertStringContainsString('ota_uploads:/var/www/html/storage/app/ota-private', $compose);
         $this->assertStringContainsString('ota_payloads:/var/www/html/storage/app/ota-payloads', $compose);
     }
