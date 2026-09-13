@@ -3,6 +3,7 @@
 namespace App\Services\Integrations;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -42,7 +43,15 @@ final readonly class GitHubContentRepository
 
     public function manifestAtRef(string $channel, string $ref): array
     {
-        return json_decode($this->fileAtRef($channel, 'manifest.json', $ref), true, 128, JSON_THROW_ON_ERROR);
+        try {
+            return json_decode($this->fileAtRef($channel, 'manifest.json', $ref), true, 128, JSON_THROW_ON_ERROR);
+        } catch (RequestException $exception) {
+            if ($exception->response->status() === 404) {
+                return ['files' => []];
+            }
+
+            throw $exception;
+        }
     }
 
     public function fileAtRef(string $channel, string $path, string $ref): string

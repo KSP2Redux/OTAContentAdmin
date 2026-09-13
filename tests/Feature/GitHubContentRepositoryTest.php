@@ -31,4 +31,16 @@ class GitHubContentRepositoryTest extends TestCase
         Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer test-token'));
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'raw.githubusercontent.com'));
     }
+
+    public function test_a_missing_authenticated_manifest_is_an_empty_channel(): void
+    {
+        Cache::put('github-app-token', 'test-token');
+        Http::fake([
+            'https://api.github.com/repos/KSP2Redux/Content/contents/missions/manifest.json?ref=main' => Http::response([
+                'message' => 'Not Found',
+            ], 404),
+        ]);
+
+        $this->assertSame(['files' => []], app(GitHubContentRepository::class)->manifest('missions'));
+    }
 }
