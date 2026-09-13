@@ -58,6 +58,11 @@ final readonly class GitHubContentRepository
     {
         $encodedPath = implode('/', array_map('rawurlencode', explode('/', "{$channel}/{$path}")));
         $response = $this->request(true)->get($this->api('/contents/'.$encodedPath), ['ref' => $ref])->throw()->json();
+
+        if (($response['encoding'] ?? null) === 'none' && is_string($response['git_url'] ?? null)) {
+            $response = $this->request(true)->get($response['git_url'])->throw()->json();
+        }
+
         if (($response['encoding'] ?? null) !== 'base64') {
             throw new RuntimeException('GitHub returned an unsupported content encoding.');
         }

@@ -43,4 +43,27 @@ class GitHubContentRepositoryTest extends TestCase
 
         $this->assertSame(['files' => []], app(GitHubContentRepository::class)->manifest('missions'));
     }
+
+    public function test_large_files_follow_the_authenticated_git_blob_reference(): void
+    {
+        Cache::put('github-app-token', 'test-token');
+        $contents = str_repeat('{"part":true}', 100_000);
+        $blobUrl = 'https://api.github.com/repos/KSP2Redux/Content/git/blobs/large-sha';
+
+        Http::fake([
+            'https://api.github.com/repos/KSP2Redux/Content/contents/main-menu-vessels/large.json?ref=main' => Http::response([
+                'encoding' => 'none',
+                'content' => '',
+                'git_url' => $blobUrl,
+            ]),
+            $blobUrl => Http::response([
+                'encoding' => 'base64',
+                'content' => base64_encode($contents),
+            ]),
+        ]);
+
+        $this->assertSame($contents, app(GitHubContentRepository::class)->file('main-menu-vessels', 'large.json'));
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer test-token'));
+    }
 }
