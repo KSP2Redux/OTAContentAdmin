@@ -13,16 +13,19 @@ final class LosslessJsonNormalizer
     /** @throws JsonException */
     public function normalize(string $json, bool $trimTypeNames = false): string
     {
-        json_decode($json, true, 128, JSON_THROW_ON_ERROR);
+        if (! json_validate($json, 128)) {
+            throw new JsonException(json_last_error_msg(), json_last_error());
+        }
+
         $this->text = preg_replace('/^\xEF\xBB\xBF/', '', $json) ?? $json;
         $this->at = 0;
-        $node = $this->readValue();
+        $normalized = $this->readValue($trimTypeNames)['text'];
         $this->skipWhitespace();
         if ($this->at !== strlen($this->text)) {
             throw new JsonException('Unexpected data after JSON document.');
         }
 
-        return $this->write($node, $trimTypeNames);
+        return $normalized;
     }
 
     private function skipWhitespace(): void
@@ -32,29 +35,36 @@ final class LosslessJsonNormalizer
         }
     }
 
-    private function readValue(): array
+    /** @return array{text: string, null: bool} */
+    private function readValue(bool $trimTypeNames): array
     {
         $this->skipWhitespace();
         $char = $this->text[$this->at] ?? '';
         if ($char === '{') {
-            return $this->readObject();
+            return ['text' => $this->readObject($trimTypeNames), 'null' => false];
         }
         if ($char === '[') {
-            return $this->readArray();
+            return ['text' => $this->readArray($trimTypeNames), 'null' => false];
         }
 
-        return ['kind' => 'scalar', 'raw' => $this->readScalar()];
+        $raw = $this->readScalar();
+
+        return [
+            'text' => $trimTypeNames ? preg_replace('/, Version=\d+(?:\.\d+)*, Culture=[\w-]+, PublicKeyToken=\w+/', '', $raw) : $raw,
+            'null' => $raw === 'null',
+        ];
     }
 
-    private function readObject(): array
+    private function readObject(bool $trimTypeNames): string
     {
         $this->at++;
         $this->skipWhitespace();
-        $items = [];
+        $output = '{';
+        $first = true;
         if (($this->text[$this->at] ?? '') === '}') {
             $this->at++;
 
-            return ['kind' => 'object', 'items' => []];
+            return '{}';
         }
         while (true) {
             $this->skipWhitespace();
@@ -63,41 +73,50 @@ final class LosslessJsonNormalizer
             if (($this->text[$this->at++] ?? '') !== ':') {
                 throw new JsonException('Expected colon.');
             }
-            $items[] = [$key, $this->readValue()];
+            $value = $this->readValue($trimTypeNames);
+            if (! $value['null']) {
+                $output .= ($first ? '' : ',').$key.':'.$value['text'];
+                $first = false;
+            }
             $this->skipWhitespace();
             $char = $this->text[$this->at++] ?? '';
             if ($char === '}') {
                 break;
-            } if ($char !== ',') {
+            }
+            if ($char !== ',') {
                 throw new JsonException('Expected comma or object end.');
             }
         }
 
-        return ['kind' => 'object', 'items' => $items];
+        return $output.'}';
     }
 
-    private function readArray(): array
+    private function readArray(bool $trimTypeNames): string
     {
         $this->at++;
         $this->skipWhitespace();
-        $items = [];
+        $output = '[';
+        $first = true;
         if (($this->text[$this->at] ?? '') === ']') {
             $this->at++;
 
-            return ['kind' => 'array', 'items' => []];
+            return '[]';
         }
         while (true) {
-            $items[] = $this->readValue();
+            $value = $this->readValue($trimTypeNames);
+            $output .= ($first ? '' : ',').$value['text'];
+            $first = false;
             $this->skipWhitespace();
             $char = $this->text[$this->at++] ?? '';
             if ($char === ']') {
                 break;
-            } if ($char !== ',') {
+            }
+            if ($char !== ',') {
                 throw new JsonException('Expected comma or array end.');
             }
         }
 
-        return ['kind' => 'array', 'items' => $items];
+        return $output.']';
     }
 
     private function readString(): string
@@ -126,24 +145,5 @@ final class LosslessJsonNormalizer
         }
 
         return substr($this->text, $start, $this->at - $start);
-    }
-
-    private function write(array $node, bool $trimTypeNames): string
-    {
-        if ($node['kind'] === 'scalar') {
-            return $trimTypeNames ? preg_replace('/, Version=\d+(?:\.\d+)*, Culture=[\w-]+, PublicKeyToken=\w+/', '', $node['raw']) : $node['raw'];
-        }
-        if ($node['kind'] === 'array') {
-            return '['.implode(',', array_map(fn ($item) => $this->write($item, $trimTypeNames), $node['items'])).']';
-        }
-        $parts = [];
-        foreach ($node['items'] as [$key, $value]) {
-            if ($value['kind'] === 'scalar' && $value['raw'] === 'null') {
-                continue;
-            }
-            $parts[] = $key.':'.$this->write($value, $trimTypeNames);
-        }
-
-        return '{'.implode(',', $parts).'}';
     }
 }

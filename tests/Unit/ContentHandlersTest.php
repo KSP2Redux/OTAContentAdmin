@@ -28,6 +28,25 @@ class ContentHandlersTest extends TestCase
         $this->assertSame('{"position":1.2300,"items":[null,2e-3],"type":"Thing, Assembly"}', $normalized);
     }
 
+    public function test_lossless_normalizer_handles_production_sized_vessels_within_the_worker_memory_limit(): void
+    {
+        $part = '{"id":"'.str_repeat('a', 96).'","value":1.2300,"unused":null,"type":"Thing, Assembly, Version=1.2.3.4, Culture=neutral, PublicKeyToken=null"}';
+        $json = '{"parts":['.implode(',', array_fill(0, 45_000, $part)).']}';
+        $previousLimit = ini_get('memory_limit');
+        ini_set('memory_limit', '128M');
+
+        try {
+            $normalized = app(LosslessJsonNormalizer::class)->normalize($json, true);
+        } finally {
+            ini_set('memory_limit', $previousLimit);
+        }
+
+        $this->assertGreaterThan(6 * 1024 * 1024, strlen($json));
+        $this->assertStringNotContainsString('"unused"', $normalized);
+        $this->assertStringNotContainsString('Version=', $normalized);
+        $this->assertJson($normalized);
+    }
+
     public function test_vessel_handler_inspects_validates_and_generates_deterministic_manifest(): void
     {
         $handler = new VesselContentHandler(new LosslessJsonNormalizer, app(CompatibilityCatalog::class));

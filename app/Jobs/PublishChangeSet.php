@@ -39,7 +39,12 @@ class PublishChangeSet implements ShouldQueue
             if (! $lock->get()) {
                 throw new \RuntimeException('Another OTA publication is active.');
             }
-            $run->update(['state' => 'running', 'stage' => 'validate', 'started_at' => now()]);
+            $run->update([
+                'state' => 'running',
+                'stage' => 'validate',
+                'started_at' => now(),
+                'metadata' => array_merge($run->metadata ?? [], ['lock_owner' => $lock->owner()]),
+            ]);
             $validation = $validator->validate($changeSet);
             if (! $validation['valid']) {
                 throw new \RuntimeException(implode(' ', $validation['errors']));
@@ -63,6 +68,7 @@ class PublishChangeSet implements ShouldQueue
                 $run->update(['stage' => 'publish_mission_localizations']);
                 $localizations->publish($localizationRun);
             }
+            $run->update(['stage' => 'publish_content']);
             $sha = $publisher->publish($changeSet);
             $run->update(['state' => 'published', 'stage' => 'complete', 'github_commit_url' => 'https://github.com/'.config('ota.content.owner').'/'.config('ota.content.repo').'/commit/'.$sha, 'finished_at' => now()]);
         } catch (Throwable $exception) {
