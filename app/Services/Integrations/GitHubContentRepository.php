@@ -19,6 +19,10 @@ final readonly class GitHubContentRepository
 
     public function manifest(string $channel): array
     {
+        if ($this->tokens->isConfigured()) {
+            return $this->manifestAtRef($channel, config('ota.content.branch'));
+        }
+
         $response = Http::acceptJson()->get(rtrim(config('ota.content.raw_url'), '/')."/{$channel}/manifest.json");
         if ($response->status() === 404) {
             return ['files' => []];
@@ -29,6 +33,10 @@ final readonly class GitHubContentRepository
 
     public function file(string $channel, string $path): string
     {
+        if ($this->tokens->isConfigured()) {
+            return $this->fileAtRef($channel, $path, config('ota.content.branch'));
+        }
+
         return Http::get(rtrim(config('ota.content.raw_url'), '/')."/{$channel}/{$path}")->throw()->body();
     }
 

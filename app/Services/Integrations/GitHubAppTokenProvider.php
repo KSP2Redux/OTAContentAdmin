@@ -9,6 +9,15 @@ use RuntimeException;
 
 final class GitHubAppTokenProvider
 {
+    public function isConfigured(): bool
+    {
+        return Cache::has('github-app-token') || (
+            config('ota.github_app.id')
+            && config('ota.github_app.installation_id')
+            && config('ota.github_app.private_key')
+        );
+    }
+
     public function token(): string
     {
         return Cache::remember('github-app-token', now()->addMinutes(50), function (): string {
