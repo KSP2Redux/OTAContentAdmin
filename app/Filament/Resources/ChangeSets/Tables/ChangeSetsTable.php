@@ -3,18 +3,18 @@
 namespace App\Filament\Resources\ChangeSets\Tables;
 
 use App\Filament\Resources\ChangeSets\ChangeSetResource;
-use App\Jobs\PublishChangeSet;
-use App\Models\PublishRun;
 use App\Services\Publishing\ChangeSetValidator;
+use App\Services\Publishing\PublishRunManager;
 use App\Services\Publishing\RollbackService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Illuminate\Support\Str;
+use RuntimeException;
 
 class ChangeSetsTable
 {
@@ -45,11 +45,16 @@ class ChangeSetsTable
 
                         return 'Publish '.$operations->count()." staged operation(s) to Content/main? Affected channels: {$channels}.".($deletions ? " Deletions: {$deletions}." : '');
                     })
-                    ->visible(fn ($record) => in_array($record->state, ['draft', 'failed', 'stale', 'validated'], true) && $record->operations()->exists())
+                    ->visible(fn ($record) => in_array($record->state, ['draft', 'failed', 'stale', 'validated'], true)
+                        && $record->operations()->exists()
+                        && ! $record->publishRuns()->whereIn('state', ['queued', 'running', 'cancelling'])->exists())
                     ->action(function ($record): void {
-                        $run = PublishRun::create(['change_set_id' => $record->id, 'user_id' => auth()->id(), 'kind' => 'content', 'state' => 'queued', 'correlation_id' => (string) Str::uuid()]);
-                        $record->update(['state' => 'queued']);
-                        PublishChangeSet::dispatch($record->id, $run->id);
+                        try {
+                            app(PublishRunManager::class)->queueChangeSet($record, auth()->id());
+                            Notification::make()->title('Publication queued')->success()->send();
+                        } catch (RuntimeException $exception) {
+                            Notification::make()->title($exception->getMessage())->danger()->send();
+                        }
                     }),
                 Action::make('rollback')->icon('heroicon-o-arrow-uturn-left')->color('warning')->requiresConfirmation()
                     ->modalDescription('Create a new inverse change set against the current Content/main? Git history will not be rewritten.')

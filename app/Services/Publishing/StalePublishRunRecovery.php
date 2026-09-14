@@ -10,37 +10,40 @@ final class StalePublishRunRecovery
     public function recover(): int
     {
         $runs = PublishRun::query()
-            ->where('state', 'running')
-            ->where(function ($query): void {
-                $query
-                    ->where(function ($query): void {
-                        $query->where('kind', 'content')
-                            ->where('stage', 'validate')
-                            ->where('started_at', '<=', now()->subMinutes(5));
-                    })
-                    ->orWhere(function ($query): void {
-                        $query->where('kind', 'content')
-                            ->where('stage', 'publish_content')
-                            ->where('started_at', '<=', now()->subMinutes(10));
-                    })
-                    ->orWhere('started_at', '<=', now()->subMinutes(45));
-            })
+            ->whereIn('state', ['queued', 'running', 'cancelling'])
             ->get();
 
+        $recovered = 0;
         foreach ($runs as $run) {
+            $inactiveSince = $run->updated_at ?? $run->started_at ?? $run->created_at;
+            $stale = match ($run->state) {
+                'queued' => $inactiveSince->lte(now()->subMinutes(5)),
+                'cancelling' => $inactiveSince->lte(now()->subMinute()),
+                default => $inactiveSince->lte(now()->subMinutes(2)),
+            };
+            if (! $stale) {
+                continue;
+            }
+
             $owner = $run->metadata['lock_owner'] ?? null;
             if (is_string($owner) && $owner !== '') {
                 Cache::restoreLock('ota-global-publish', $owner)->release();
             }
 
+            $cancelled = $run->state === 'cancelling';
             $run->update([
-                'state' => 'failed',
-                'error' => 'Publication worker stopped unexpectedly. It is safe to retry.',
+                'state' => $cancelled ? 'cancelled' : 'failed',
+                'stage' => $cancelled ? 'cancelled' : $run->stage,
+                'error' => $cancelled
+                    ? 'Publication was stopped after its worker became unresponsive.'
+                    : 'Publication worker stopped unexpectedly or stopped reporting progress. It is safe to retry.',
                 'finished_at' => now(),
             ]);
-            $run->changeSet()->whereNotIn('state', ['published'])->update(['state' => 'failed']);
+            $cancelledState = $run->metadata['previous_change_set_state'] ?? 'validated';
+            $run->changeSet()->whereNotIn('state', ['published'])->update(['state' => $cancelled ? $cancelledState : 'failed']);
+            $recovered++;
         }
 
-        return $runs->count();
+        return $recovered;
     }
 }

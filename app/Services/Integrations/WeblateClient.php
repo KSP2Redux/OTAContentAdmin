@@ -18,7 +18,7 @@ final class WeblateClient
         return $this->request()->post($this->url('/projects/'.config('ota.weblate.project').'/repository/'), ['operation' => $operation])->throw()->json();
     }
 
-    public function waitForTask(array $task): array
+    public function waitForTask(array $task, ?callable $checkpoint = null): array
     {
         $url = $task['url'] ?? $task['task_url'] ?? null;
         if (! $url) {
@@ -26,6 +26,7 @@ final class WeblateClient
         }
         $deadline = time() + config('ota.weblate.timeout_seconds');
         do {
+            $checkpoint && $checkpoint();
             $result = $this->request()->get($url)->throw()->json();
             if (in_array($result['status'] ?? null, ['success', 'completed'], true)) {
                 return $result;

@@ -15,8 +15,9 @@ final readonly class ContentPublisher
 {
     public function __construct(private GitHubContentRepository $github, private ContentHandlerRegistry $handlers, private WeblateClient $weblate, private PayloadStorage $payloads) {}
 
-    public function publish(ChangeSet $changeSet, int $unrelatedHeadRetries = 1): string
+    public function publish(ChangeSet $changeSet, int $unrelatedHeadRetries = 1, ?callable $checkpoint = null): string
     {
+        $checkpoint && $checkpoint();
         $changeSet->load('operations', 'user');
         if ($changeSet->operations->isEmpty()) {
             throw new RuntimeException('Change set has no operations.');
@@ -27,12 +28,14 @@ final readonly class ContentPublisher
         $candidateIds = $this->candidateMissionIds($changeSet);
 
         foreach ($changeSet->operations->groupBy('channel') as $channel => $operations) {
+            $checkpoint && $checkpoint();
             $handler = $this->handlers->for($channel);
             $manifest = $this->github->manifest($channel);
             $manifestHash = hash('sha256', json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
             $entries = collect($manifest['files'] ?? [])->keyBy('path');
 
             foreach ($operations as $operation) {
+                $checkpoint && $checkpoint();
                 if (($operation->metadata['_base_manifest_sha256'] ?? $manifestHash) !== $manifestHash) {
                     throw new RuntimeException("{$channel}/manifest.json changed since this operation was staged.");
                 }
@@ -69,6 +72,7 @@ final readonly class ContentPublisher
                     throw new RuntimeException(implode(' ', $report->errors));
                 }
                 $normalized = $handler->normalize($artifact);
+                $checkpoint && $checkpoint();
                 $normalizedReport = $handler->validate(new ChangeSetContext(new UploadedArtifact($normalized->path, $normalized->contents, $normalized->metadata), $manifest, $candidateIds));
                 if (! $normalizedReport->passes()) {
                     throw new RuntimeException('Normalized artifact failed validation: '.implode(' ', $normalizedReport->errors));
@@ -99,11 +103,12 @@ final readonly class ContentPublisher
         }
 
         $changeSet->update(['state' => 'publishing', 'base_content_sha' => $head, 'validation_report' => $reports]);
+        $checkpoint && $checkpoint();
         try {
-            $sha = $this->github->commit($changes, "OTA: {$changeSet->summary} [{$changeSet->id}]\n\nPublished by {$changeSet->user?->name}", $head);
+            $sha = $this->github->commit($changes, "OTA: {$changeSet->summary} [{$changeSet->id}]\n\nPublished by {$changeSet->user?->name}", $head, $checkpoint);
         } catch (RuntimeException $exception) {
             if ($unrelatedHeadRetries > 0 && str_contains($exception->getMessage(), 'moved before publication')) {
-                return $this->publish($changeSet, $unrelatedHeadRetries - 1);
+                return $this->publish($changeSet, $unrelatedHeadRetries - 1, $checkpoint);
             }
             throw $exception;
         }

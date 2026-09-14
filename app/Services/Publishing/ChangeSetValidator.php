@@ -19,7 +19,7 @@ final readonly class ChangeSetValidator
     ) {}
 
     /** @return array{valid: bool, errors: array<string>, warnings: array<string>, operations: array<string, mixed>} */
-    public function validate(ChangeSet $changeSet): array
+    public function validate(ChangeSet $changeSet, ?callable $checkpoint = null): array
     {
         $changeSet->load('operations');
         $errors = [];
@@ -35,10 +35,12 @@ final readonly class ChangeSetValidator
             $errors[] = 'The change set has no operations.';
         }
         foreach ($changeSet->operations->groupBy('channel') as $channel => $operations) {
+            $checkpoint && $checkpoint();
             $manifest = $this->github->manifest($channel);
             $manifestHash = hash('sha256', json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
             $entries = collect($manifest['files'] ?? [])->keyBy('path');
             foreach ($operations as $operation) {
+                $checkpoint && $checkpoint();
                 if (($operation->metadata['_base_manifest_sha256'] ?? $manifestHash) !== $manifestHash) {
                     $errors[] = "{$channel}/manifest.json changed since this operation was staged.";
                 }
@@ -72,6 +74,7 @@ final readonly class ChangeSetValidator
                 array_push($warnings, ...$report->warnings);
                 if ($report->passes()) {
                     $normalized = $handler->normalize($artifact);
+                    $checkpoint && $checkpoint();
                     $normalizedReport = $handler->validate(new ChangeSetContext(new UploadedArtifact($normalized->path, $normalized->contents, $normalized->metadata), $manifest, $candidateMissionIds));
                     array_push($errors, ...$normalizedReport->errors);
                     array_push($warnings, ...$normalizedReport->warnings);

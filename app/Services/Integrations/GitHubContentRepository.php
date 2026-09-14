@@ -75,8 +75,9 @@ final readonly class GitHubContentRepository
     }
 
     /** @param array<string, string|null> $files */
-    public function commit(array $files, string $message, string $expectedHead): string
+    public function commit(array $files, string $message, string $expectedHead, ?callable $checkpoint = null): string
     {
+        $checkpoint && $checkpoint();
         $request = $this->request(true);
         $currentHead = $this->headSha(true);
         if (! hash_equals($expectedHead, $currentHead)) {
@@ -85,6 +86,7 @@ final readonly class GitHubContentRepository
         $commit = $request->get($this->api("/git/commits/{$currentHead}"))->throw()->json();
         $tree = [];
         foreach ($files as $path => $contents) {
+            $checkpoint && $checkpoint();
             if ($contents === null) {
                 $tree[] = ['path' => $path, 'mode' => '100644', 'type' => 'blob', 'sha' => null];
 
@@ -93,8 +95,11 @@ final readonly class GitHubContentRepository
             $blob = $request->post($this->api('/git/blobs'), ['content' => base64_encode($contents), 'encoding' => 'base64'])->throw()->json();
             $tree[] = ['path' => $path, 'mode' => '100644', 'type' => 'blob', 'sha' => $blob['sha']];
         }
+        $checkpoint && $checkpoint();
         $newTree = $request->post($this->api('/git/trees'), ['base_tree' => $commit['tree']['sha'], 'tree' => $tree])->throw()->json();
+        $checkpoint && $checkpoint();
         $newCommit = $request->post($this->api('/git/commits'), ['message' => $message, 'tree' => $newTree['sha'], 'parents' => [$currentHead]])->throw()->json();
+        $checkpoint && $checkpoint();
         $request->patch($this->api('/git/refs/heads/'.config('ota.content.branch')), ['sha' => $newCommit['sha'], 'force' => false])->throw();
 
         return $newCommit['sha'];

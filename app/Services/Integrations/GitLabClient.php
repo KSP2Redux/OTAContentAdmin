@@ -16,10 +16,11 @@ final class GitLabClient
         ])->throw()->json();
     }
 
-    public function waitForPipeline(int $id): array
+    public function waitForPipeline(int $id, ?callable $checkpoint = null): array
     {
         $deadline = time() + config('ota.gitlab.timeout_seconds');
         do {
+            $checkpoint && $checkpoint();
             $pipeline = $this->request()->get($this->url('/projects/'.rawurlencode(config('ota.gitlab.project_id'))."/pipelines/{$id}"))->throw()->json();
             if (($pipeline['status'] ?? null) === 'success') {
                 return $pipeline;

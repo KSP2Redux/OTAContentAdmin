@@ -35,6 +35,7 @@ services:
       SESSION_ENCRYPT: "true"
       SESSION_SECURE_COOKIE: "true"
       QUEUE_CONNECTION: redis
+      REDIS_QUEUE_RETRY_AFTER: "3700"
       AUTHENTIK_ISSUER: https://sso.rendezvous.dev/application/o/redux-ota-admin/
       AUTHENTIK_REDIRECT_URI: https://ota-admin.rendezvous.dev/auth/callback
       AUTHENTIK_PUBLISHER_GROUP: "Rendezvous Entertainment Content Managers"
@@ -68,7 +69,7 @@ services:
     image: *app-image
     pull_policy: always
     restart: unless-stopped
-    command: ["php", "artisan", "queue:work", "--sleep=2", "--tries=1", "--timeout=3600"]
+    command: ["php", "artisan", "queue:work", "--sleep=2", "--tries=1", "--timeout=3300"]
     user: "0:33"
     environment: *app-environment
     volumes: *app-volumes
