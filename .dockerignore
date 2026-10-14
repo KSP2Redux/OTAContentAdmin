@@ -2,8 +2,12 @@
 .env
 vendor
 node_modules
+**/__pycache__
 storage/logs/*
 storage/app/ota-private/*
+storage/app/ota-payloads/*
+storage/app/vessel-models/*
+storage/app/model-package*
 database/database.sqlite
 tests
 bootstrap/cache/*.php

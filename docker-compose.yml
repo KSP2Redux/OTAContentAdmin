@@ -2,10 +2,11 @@ services:
   upload-init:
     image: busybox:1.37
     restart: "no"
-    command: ["sh", "-c", "chgrp -R 33 /uploads /payloads && chmod -R g+rwX,o-rwx /uploads /payloads && chmod 2770 /uploads /payloads"]
+    command: ["sh", "-c", "chgrp -R 33 /uploads /payloads /models && chmod -R g+rwX,o-rwx /uploads /payloads /models && chmod 2770 /uploads /payloads /models"]
     volumes:
       - ota_uploads:/uploads
       - ota_payloads:/payloads
+      - ota_models:/models
     network_mode: none
     read_only: true
     security_opt: ["no-new-privileges:true"]
@@ -49,6 +50,7 @@ services:
     volumes: &app-volumes
       - ota_uploads:/var/www/html/storage/app/ota-private
       - ota_payloads:/var/www/html/storage/app/ota-payloads
+      - ota_models:/var/www/html/storage/app/vessel-models
       - ota_secrets:/run/secrets:ro
     networks: [internal, caddy_net]
     security_opt: ["no-new-privileges:true"]
@@ -133,6 +135,7 @@ volumes:
   ota_redis:
   ota_uploads:
   ota_payloads:
+  ota_models:
   ota_secrets:
     external: true
     name: ota-content-admin-secrets

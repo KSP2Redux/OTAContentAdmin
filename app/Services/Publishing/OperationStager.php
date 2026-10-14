@@ -6,7 +6,9 @@ use App\Models\ChangeOperation;
 use App\Models\ChangeSet;
 use App\Services\Content\ContentHandlerRegistry;
 use App\Services\Content\Data\UploadedArtifact;
+use App\Services\Content\LosslessJsonNormalizer;
 use App\Services\Integrations\GitHubContentRepository;
+use App\Services\Vessels\VesselWorkspace;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -34,6 +36,14 @@ final readonly class OperationStager
                 throw new RuntimeException('The uploaded payload path is invalid. Upload the file again.');
             }
             $contents = Storage::disk('ota-private')->get($uploadedPayloadPath);
+            if ($channel === 'main-menu-vessels') {
+                $contents = app(LosslessJsonNormalizer::class)->normalize($contents, true);
+                $document = json_decode($contents, true, 128, JSON_THROW_ON_ERROR);
+                if (isset($document['parts'], $document['AssemblyDefinition']) || isset($document['Assemblies'][0]['Assembly']) || ! empty($document['Assemblies'][0]['assembly'])) {
+                    $contents = app(VesselWorkspace::class)->convert($contents)['contents'];
+                }
+                unset($document);
+            }
             if ($channel === 'missions' && ! $path) {
                 $id = json_decode($contents, true, 128, JSON_THROW_ON_ERROR)['ID'] ?? throw new RuntimeException('Mission ID is required.');
                 $path = Str::slug($id).'.json';

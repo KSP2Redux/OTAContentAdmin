@@ -30,6 +30,13 @@ return [
 
     'disks' => [
 
+        'vessel-models' => [
+            'driver' => 'local',
+            'root' => storage_path('app/vessel-models'),
+            'serve' => false,
+            'throw' => true,
+        ],
+
         'ota-private' => [
             'driver' => 'local',
             'root' => storage_path('app/ota-private'),

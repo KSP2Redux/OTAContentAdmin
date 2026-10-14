@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ChangeSets\RelationManagers;
 
+use App\Filament\Pages\VesselEditor;
 use App\Filament\Resources\ChangeSets\Pages\EditChangeSet;
 use App\Models\ChangeOperation;
 use App\Services\Publishing\ChangeOperationRemover;
@@ -64,6 +65,9 @@ class ChangeOperationsRelationManager extends RelationManager
             ->emptyStateHeading('No staged changes')
             ->emptyStateDescription('Add a vessel or mission operation to this change set first.')
             ->recordActions([
+                Action::make('previewVessel')->label('Preview / edit')->icon('heroicon-o-cube')
+                    ->url(fn (ChangeOperation $record): string => VesselEditor::getUrl(['operation' => $record->id]))
+                    ->visible(fn (ChangeOperation $record): bool => $record->channel === 'main-menu-vessels' && in_array($record->action, ['add', 'replace'], true) && in_array($this->getOwnerRecord()->state, ['draft', 'validated'], true)),
                 Action::make('remove')
                     ->label('Remove')
                     ->icon('heroicon-o-trash')

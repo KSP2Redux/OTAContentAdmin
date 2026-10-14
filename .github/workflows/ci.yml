@@ -39,6 +39,11 @@ jobs:
         run: vendor/bin/pint --test
       - name: Run tests
         run: php artisan test
+      - name: Check private model exporter
+        run: |
+          python -m venv "$RUNNER_TEMP/vessel-export-tests"
+          "$RUNNER_TEMP/vessel-export-tests/bin/python" -m pip install numpy PyYAML
+          "$RUNNER_TEMP/vessel-export-tests/bin/python" -m unittest discover -s tests/python
 
   image:
     if: github.event_name == 'push'

@@ -31,6 +31,7 @@ class Vessels extends Page
     {
         return [
             Action::make('newChangeSet')->label('New change set')->url(ChangeSetResource::getUrl('create')),
+            Action::make('prepare')->label('Prepare and preview vessel')->url(VesselEditor::getUrl()),
             $this->uploadAction('add', 'Add vessel'), $this->uploadAction('replace', 'Replace vessel'),
             Action::make('reorder')->label('Reorder vessel')->schema([
                 $this->changeSetSelect(), Select::make('path')->options($this->pathOptions())->required(),
@@ -69,7 +70,7 @@ class Vessels extends Page
         }
 
         return Action::make($action)->label($label)->schema([...$fields,
-            FileUpload::make('upload')->disk('ota-private')->directory('drafts/vessels')->acceptedFileTypes(['application/json', 'text/plain'])->maxSize(10240)->required(),
+            FileUpload::make('upload')->disk('ota-private')->directory('drafts/vessels')->acceptedFileTypes(['application/json', 'text/plain'])->maxSize(51200)->required(),
             TextInput::make('author')->required(), Select::make('body')->options(array_combine(app(CompatibilityCatalog::class)->bodies(), app(CompatibilityCatalog::class)->bodies()))->searchable()->required(),
             TextInput::make('order_position')->numeric()->minValue(1),
         ])->action(function (array $data) use ($action): void {

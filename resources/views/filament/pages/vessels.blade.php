@@ -43,6 +43,7 @@
                             <code class="ota-table-code ota-table-hash" title="{{ $item['sha256'] }}">{{ $item['sha256'] }}</code>
                         </td>
                         <td>
+                            <a class="ota-table-download" href="{{ \App\Filament\Pages\VesselEditor::getUrl(['path' => $item['path']]) }}">Preview / edit</a>
                             <a
                                 class="ota-table-download"
                                 href="{{ route('content.download', ['channel' => 'main-menu-vessels', 'path' => $item['path']]) }}"

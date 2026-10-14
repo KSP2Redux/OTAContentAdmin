@@ -1,0 +1,141 @@
+import './bootstrap';
+import './vessel-editor.css';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+function boot() {
+    const host = document.getElementById('vessel-editor');
+    if (!host || host.dataset.initialized) return;
+    host.dataset.initialized = '1';
+    const config = JSON.parse(document.getElementById('vessel-editor-config').textContent);
+    const $ = id => host.querySelector(`#ve-${id}`);
+    let workspace = null, catalog = { parts: {} }, selected = null, renderVersion = 0, playback = null, home = new THREE.Vector3();
+    let busy = false, modelCount = 0, missingCount = 0;
+    const nodes = new Map(), modelCache = new Map(), loader = new GLTFLoader();
+    const scene = new THREE.Scene(); scene.background = new THREE.Color('#101b2c');
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 1000000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor('#101b2c');
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.35;
+    $('canvas').append(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+    scene.add(new THREE.HemisphereLight(0xcbdfff, 0x263144, 2.4));
+    const key = new THREE.DirectionalLight(0xffead5, 4); key.position.set(20, 35, 45); scene.add(key);
+    const fill = new THREE.DirectionalLight(0x77aaff, 2); fill.position.set(-35, 5, -20); scene.add(fill);
+    let vessel = new THREE.Group(); scene.add(vessel);
+    const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 8, 0x38bdf8, 2, 1);
+    scene.add(arrow);
+    const selection = new THREE.BoxHelper(undefined, 0x67e8f9); selection.visible = false; scene.add(selection);
+    const clock = new THREE.Clock();
+    const resize = () => { const w = $('canvas').clientWidth, h = $('canvas').clientHeight; renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix(); };
+    const observer = new ResizeObserver(resize); observer.observe($('canvas')); resize();
+    const message = (text, error = false) => { $('status').textContent = text; $('status').classList.toggle('ve-error', error); };
+    const setBusy = value => { busy = value; host.setAttribute('aria-busy', String(value)); for (const id of ['stage', 'download', 'deploy-all', 'retract-all', 'minus', 'plus', 'flip']) $(id).disabled = value || !workspace; };
+    const request = async (url, data, file = false) => {
+        const response = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': config.csrf, 'Accept': 'application/json', ...(file ? {} : {'Content-Type': 'application/json'}) }, body: file ? data : JSON.stringify(data) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(Object.values(result.errors ?? {}).flat().join(' ') || result.message || 'Request failed.');
+        return result;
+    };
+    const guard = task => async (...args) => { if (busy) return; setBusy(true); try { await task(...args); } catch (error) { message(error.message, true); choose(selected); } finally { setBusy(false); } };
+    const fetchModel = url => { if (!modelCache.has(url)) modelCache.set(url, loader.loadAsync(url)); return modelCache.get(url); };
+    const pose = () => $('pose').value === 'leaning' ? new THREE.Quaternion(-0.4744, 0, -0.2726, 0.837).normalize() : new THREE.Quaternion();
+    const disposeVessel = () => { vessel.traverse(o => { if (o.isMesh) { o.material.dispose(); if (o.userData.placeholder) o.geometry.dispose(); } }); scene.remove(vessel); };
+    function choose(guid) {
+        selected = guid; $('part').value = guid ?? '';
+        const part = workspace?.parts.find(p => p.guid === guid), node = nodes.get(guid);
+        $('deployed').disabled = !part || part.deployed === null || part.canDeploy === false;
+        $('deployed').checked = part?.deployed === true;
+        $('part-note').textContent = part ? `${part.name.replaceAll('_', ' ')}${part.canDeploy === false ? '  /  fixed part' : part.deployed === null ? '  /  no deployment control' : ''}${catalog.parts[part.name]?.warnings?.length ? ' / approximate model pose' : ''}` : 'Select a part.';
+        selection.visible = !!node; if (node) selection.setFromObject(node);
+    }
+    function listParts() {
+        const filter = $('search').value.toLowerCase(); $('part').replaceChildren();
+        workspace?.parts.forEach((p, i) => { if (p.name.toLowerCase().includes(filter)) { const option = new Option(`${i+1}. ${p.name.replaceAll('_', ' ')}${p.deployed === null ? '' : p.deployed ? '  /  deployed' : '  /  retracted'}`, p.guid); $('part').add(option); } });
+        if (selected) $('part').value = selected;
+    }
+    function frame() {
+        playback = null; vessel.position.copy(home); vessel.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(vessel), size = box.getSize(new THREE.Vector3());
+        const span = Math.max(size.x, size.y, size.z, 3); const center = box.getCenter(new THREE.Vector3());
+        camera.position.copy(center).add(new THREE.Vector3(span*0.9, span*0.45, span*1.65));
+        controls.target.copy(center); controls.update(); arrow.setLength(span*0.35, span*0.07, span*0.035);
+    }
+    function orient() {
+        playback = null; vessel.position.set(0, 0, 0); vessel.quaternion.copy(pose()); vessel.updateMatrixWorld(true);
+        home.copy(new THREE.Box3().setFromObject(vessel).getCenter(new THREE.Vector3())).negate(); vessel.position.copy(home); frame();
+    }
+    async function display(result, initial = false) {
+        const fresh = initial || workspace === null;
+        workspace = result;
+        if (fresh) { $('name').value = result.metadata.VehicleName || result.metadata.Name; $('mass').value = result.metadata.Mass || ''; }
+        $('stats').textContent = `${result.parts.length} parts  /  ${result.assemblies} ${result.assemblies === 1 ? 'assembly' : 'assemblies'}  /  ${(result.bytes/1024).toFixed(0)} KiB`;
+        listParts(); disposeVessel(); vessel = new THREE.Group(); scene.add(vessel); nodes.clear(); modelCount = 0; missingCount = 0;
+        const version = ++renderVersion;
+        for (const part of result.parts) {
+            message(`Loading preview: ${nodes.size+1} / ${result.parts.length} parts...`);
+            const group = new THREE.Group(); group.userData.guid = part.guid;
+            group.position.set(part.position[0], part.position[1], -part.position[2]);
+            group.quaternion.set(-part.rotation[0], -part.rotation[1], part.rotation[2], part.rotation[3]);
+            if (group.quaternion.lengthSq() === 0) group.quaternion.identity(); else group.quaternion.normalize();
+            const model = catalog.parts[part.name];
+            const url = model?.[part.deployed === true ? 'extended' : 'retracted'];
+            if (url) {
+                try {
+                    const gltf = await fetchModel(url); if (version !== renderVersion) return;
+                    const object = gltf.scene.clone(true);
+                    object.traverse(mesh => { if (mesh.isMesh) { if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals(); mesh.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(...part.color), metalness: 0.25, roughness: 0.6, side: THREE.DoubleSide }); mesh.userData.guid = part.guid; } });
+                    group.add(object); modelCount++;
+                } catch { missingCount++; }
+            } else missingCount++;
+            if (!group.children.length) {
+                const bounds = model?.bounds, size = bounds ? bounds.max.map((v,i) => Math.max(v-bounds.min[i], 0.1)) : [1.25,2,1.25];
+                if (part.deployed !== null) size[1] *= part.deployed ? 3 : 0.5;
+                const geometry = new THREE.BoxGeometry(...size); const material = new THREE.MeshStandardMaterial({ color: 0x667085, wireframe: true });
+                const mesh = new THREE.Mesh(geometry, material); mesh.userData.guid = part.guid; mesh.userData.placeholder = true; group.add(mesh);
+            }
+            vessel.add(group); nodes.set(part.guid, group);
+        }
+        $('model-status').textContent = `${modelCount} real part models  /  ${missingCount} approximations${Object.keys(catalog.parts).length ? '' : '. Import a private model package to enable geometry.'}`;
+        orient(); choose(selected); message(result.notes?.length ? result.notes.join(' ') : 'Workspace ready to review.'); setBusy(false);
+    }
+    const edit = guard(async options => display(await request(config.editUrl, { contents: workspace.contents, ...options })));
+    $('file').addEventListener('change', guard(async () => { const file = $('file').files[0]; if (!file) return; const form = new FormData(); form.set('file', file); selected = null; const result = await request(config.convertUrl, form, true); $('slug').value = file.name.replace(/\.json$/i, '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); $('action').value = 'add'; await display(result, true); }));
+    $('deploy-all').onclick = () => workspace && edit({ all_deployed: true });
+    $('retract-all').onclick = () => workspace && edit({ all_deployed: false });
+    $('deployed').onchange = () => selected && edit({ deployment: { [selected]: $('deployed').checked } });
+    $('minus').onclick = () => workspace && edit({ rotation: { axis: $('axis').value, degrees: -90 } });
+    $('plus').onclick = () => workspace && edit({ rotation: { axis: $('axis').value, degrees: 90 } });
+    $('flip').onclick = () => workspace && edit({ rotation: { axis: $('axis').value, degrees: 180 } });
+    $('search').oninput = () => { listParts(); if (selected && $('part').value !== selected) choose(null); }; $('part').onchange = () => choose($('part').value);
+    $('pose').onchange = orient; $('frame').onclick = frame;
+    $('rest').onclick = () => { playback = null; vessel.position.copy(home); };
+    const fly = kind => {
+        if (!workspace) return;
+        vessel.position.copy(home); vessel.updateMatrixWorld(true); let extent = 1;
+        for (const node of nodes.values()) { const size = new THREE.Box3().setFromObject(node).getSize(new THREE.Vector3()); extent = Math.max(extent, size.x, size.y, size.z); }
+        const direction = new THREE.Vector3(0, 1, 0).applyQuaternion(vessel.quaternion);
+        playback = { kind, start: performance.now(), duration: kind === 'in' ? 2500 : 5000, offset: direction.multiplyScalar(extent*(kind === 'in' ? 60 : 5)) };
+    };
+    $('in').onclick = () => fly('in'); $('out').onclick = () => fly('out');
+    $('download').onclick = guard(async () => { const result = await request(config.editUrl, { contents: workspace.contents, name: $('name').value, ...($('mass').value ? {mass: Number($('mass').value)} : {}) }); await display(result); const url = URL.createObjectURL(new Blob([result.contents], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = ($('slug').value || 'vessel')+'.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+    $('stage').onclick = guard(async () => { const result = await request(config.stageUrl, { contents: workspace.contents, name: $('name').value, mass: Number($('mass').value), author: $('author').value, body: $('body').value, slug: $('slug').value, path: $('slug').value+'.json', action: $('action').value, change_set_id: $('change-set').value }); message(result.message); });
+    renderer.domElement.addEventListener('pointerup', event => { if (!workspace) return; const rect = renderer.domElement.getBoundingClientRect(), mouse = new THREE.Vector2((event.clientX-rect.left)/rect.width*2-1, -(event.clientY-rect.top)/rect.height*2+1); const ray = new THREE.Raycaster(); ray.setFromCamera(mouse, camera); const hit = ray.intersectObject(vessel, true)[0]; if (hit) choose(hit.object.userData.guid); });
+    config.bodyOptions.forEach(body => $('body').add(new Option(body, body)));
+    $('body').value = 'Kerbin';
+    config.changeSets.forEach(changeSet => $('change-set').add(new Option(changeSet.summary, changeSet.id)));
+    let frameId;
+    function tick() {
+        if (!host.isConnected) { cancelAnimationFrame(frameId); observer.disconnect(); controls.dispose(); disposeVessel(); renderer.dispose(); return; }
+        frameId = requestAnimationFrame(tick);
+        if (playback) { const t = Math.min((performance.now()-playback.start)/playback.duration, 1); const shaped = playback.kind === 'out' ? t*t*t : 1-(1-t)*(1-t)*(1-t); vessel.position.copy(home).addScaledVector(playback.offset, playback.kind === 'out' ? shaped : shaped-1); if (t === 1) playback = null; }
+        arrow.setDirection(new THREE.Vector3(0,1,0).applyQuaternion(vessel.quaternion)); arrow.position.copy(home);
+        if (selection.visible && nodes.has(selected)) selection.setFromObject(nodes.get(selected));
+        controls.update(clock.getDelta()); renderer.render(scene, camera);
+    }
+    tick();
+    (async () => { try { catalog = await (await fetch(config.catalogUrl, { headers: {Accept:'application/json'} })).json(); if (config.path || config.operation) { setBusy(true); const sourceUrl = config.operation ? config.draftUrl+'/'+encodeURIComponent(config.operation) : config.publishedUrl+'/'+encodeURIComponent(config.path); const response = await fetch(sourceUrl, {headers:{Accept:'application/json'}}); const result = await response.json(); if (!response.ok) throw new Error(result.message); $('author').value = result.published.author; $('body').value = result.published.body; $('action').value = result.published.action || 'replace'; $('slug').value = result.published.path.replace(/\.json$/, ''); if (result.published.change_set_id) $('change-set').value = result.published.change_set_id; await display(result, true); } else $('model-status').textContent = `${Object.keys(catalog.parts).length} private part definitions available.`; } catch(error) { message(error.message, true); } finally { setBusy(false); } })();
+}
+document.addEventListener('livewire:navigated', boot);
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

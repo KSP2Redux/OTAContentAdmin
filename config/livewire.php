@@ -3,7 +3,7 @@
 return [
     'temporary_file_upload' => [
         'disk' => 'ota-private',
-        'rules' => ['required', 'file', 'max:10240'],
+        'rules' => ['required', 'file', 'max:51200'],
         'directory' => 'livewire-tmp',
         'middleware' => 'throttle:60,1',
         'preview_mimes' => [
