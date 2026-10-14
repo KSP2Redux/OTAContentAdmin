@@ -3,6 +3,7 @@ import './vessel-editor.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { placeTravelArrow, projectedBounds } from './vessel-travel-arrow';
 
 function boot() {
     const host = document.getElementById('vessel-editor');
@@ -24,7 +25,9 @@ function boot() {
     const key = new THREE.DirectionalLight(0xffead5, 4); key.position.set(20, 35, 45); scene.add(key);
     const fill = new THREE.DirectionalLight(0x77aaff, 2); fill.position.set(-35, 5, -20); scene.add(fill);
     let vessel = new THREE.Group(); scene.add(vessel);
+    const localBounds = new THREE.Box3(), vesselBounds = new THREE.Box3();
     const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 8, 0x38bdf8, 2, 1);
+    arrow.visible = false;
     scene.add(arrow);
     const selection = new THREE.BoxHelper(undefined, 0x67e8f9); selection.visible = false; scene.add(selection);
     const clock = new THREE.Clock();
@@ -60,7 +63,19 @@ function boot() {
         const box = new THREE.Box3().setFromObject(vessel), size = box.getSize(new THREE.Vector3());
         const span = Math.max(size.x, size.y, size.z, 3); const center = box.getCenter(new THREE.Vector3());
         camera.position.copy(center).add(new THREE.Vector3(span*0.9, span*0.45, span*1.65));
-        controls.target.copy(center); controls.update(); arrow.setLength(span*0.35, span*0.07, span*0.035);
+        controls.target.copy(center); controls.update();
+        for (let attempt = 0; attempt < 8; attempt++) {
+            updateArrow();
+            const framed = box.clone().union(new THREE.Box3().setFromObject(arrow));
+            const projected = projectedBounds(framed, camera);
+            if (Math.max(Math.abs(projected.min.x), Math.abs(projected.max.x), Math.abs(projected.min.y), Math.abs(projected.max.y)) <= 0.92) break;
+            camera.position.sub(center).multiplyScalar(1.15).add(center); controls.update();
+        }
+    }
+    function updateArrow() {
+        vessel.updateMatrixWorld(true);
+        vesselBounds.copy(localBounds).applyMatrix4(vessel.matrixWorld);
+        placeTravelArrow(arrow, vesselBounds, camera, new THREE.Vector3(0, 1, 0).applyQuaternion(vessel.quaternion));
     }
     function orient() {
         playback = null; vessel.position.set(0, 0, 0); vessel.quaternion.copy(pose()); vessel.updateMatrixWorld(true);
@@ -98,6 +113,7 @@ function boot() {
             vessel.add(group); nodes.set(part.guid, group);
         }
         $('model-status').textContent = `${modelCount} real part models  /  ${missingCount} approximations${Object.keys(catalog.parts).length ? '' : '. Import a private model package to enable geometry.'}`;
+        localBounds.setFromObject(vessel);
         orient(); choose(selected); message(result.notes?.length ? result.notes.join(' ') : 'Workspace ready to review.'); setBusy(false);
     }
     const edit = guard(async options => display(await request(config.editUrl, { contents: workspace.contents, ...options })));
@@ -130,9 +146,8 @@ function boot() {
         if (!host.isConnected) { cancelAnimationFrame(frameId); observer.disconnect(); controls.dispose(); disposeVessel(); renderer.dispose(); return; }
         frameId = requestAnimationFrame(tick);
         if (playback) { const t = Math.min((performance.now()-playback.start)/playback.duration, 1); const shaped = playback.kind === 'out' ? t*t*t : 1-(1-t)*(1-t)*(1-t); vessel.position.copy(home).addScaledVector(playback.offset, playback.kind === 'out' ? shaped : shaped-1); if (t === 1) playback = null; }
-        arrow.setDirection(new THREE.Vector3(0,1,0).applyQuaternion(vessel.quaternion)); arrow.position.copy(home);
         if (selection.visible && nodes.has(selected)) selection.setFromObject(nodes.get(selected));
-        controls.update(clock.getDelta()); renderer.render(scene, camera);
+        controls.update(clock.getDelta()); updateArrow(); renderer.render(scene, camera);
     }
     tick();
     (async () => { try { catalog = await (await fetch(config.catalogUrl, { headers: {Accept:'application/json'} })).json(); if (config.path || config.operation) { setBusy(true); const sourceUrl = config.operation ? config.draftUrl+'/'+encodeURIComponent(config.operation) : config.publishedUrl+'/'+encodeURIComponent(config.path); const response = await fetch(sourceUrl, {headers:{Accept:'application/json'}}); const result = await response.json(); if (!response.ok) throw new Error(result.message); $('author').value = result.published.author; $('body').value = result.published.body; $('action').value = result.published.action || 'replace'; $('slug').value = result.published.path.replace(/\.json$/, ''); if (result.published.change_set_id) $('change-set').value = result.published.change_set_id; await display(result, true); } else $('model-status').textContent = `${Object.keys(catalog.parts).length} private part definitions available.`; } catch(error) { message(error.message, true); } finally { setBusy(false); } })();
