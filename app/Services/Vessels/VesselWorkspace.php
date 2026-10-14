@@ -138,7 +138,7 @@ final readonly class VesselWorkspace
 
                             continue;
                         }
-                        if ($type === 'Data_ControlSurface' && $this->hasProceduralModule($part) && ($object['IsCtrlSurfaceActive'] ?? true)) {
+                        if ($type === 'Data_ControlSurface' && $this->canDeployControl($part, $object)) {
                             $changes[LosslessJsonEditor::pointer(isset($object['Deploy']) ? [...$base, 'Deploy', 'storedValue'] : [...$base, 'Deploy'])] = isset($object['Deploy']) ? $extended : ['storedValue' => $extended];
                             $matched[$guid] = true;
 
@@ -232,7 +232,7 @@ final readonly class VesselWorkspace
                     }
                     if (($entry['Name'] ?? '') === 'Data_ControlSurface') {
                         $controls[] = $object;
-                        if ($this->hasProceduralModule($part) && ($object['IsCtrlSurfaceActive'] ?? true) && ! $canDeploy) {
+                        if ($this->canDeployControl($part, $object) && ! $canDeploy) {
                             $deployable = $object['Deploy']['storedValue'] ?? false;
                             $canDeploy = true;
                             $deploymentKind = 'control';
@@ -279,6 +279,13 @@ final readonly class VesselWorkspace
         }
 
         return false;
+    }
+
+    private function canDeployControl(array $part, array $state): bool
+    {
+        // Grid fins and airbrakes use control-surface deployment without a procedural module.
+        // IsCtrlSurfaceActive is an initialized runtime flag, not their deployment capability.
+        return ! $this->hasProceduralModule($part) || ($state['IsCtrlSurfaceActive'] ?? true);
     }
 
     private function replaceRaw(string $contents, string $path, string $replacement): string

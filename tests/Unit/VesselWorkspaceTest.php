@@ -145,4 +145,24 @@ class VesselWorkspaceTest extends TestCase
         $result = app(VesselWorkspace::class)->convert(json_encode($assembly, JSON_THROW_ON_ERROR));
         $this->assertSame(6.25, $result['metadata']['Mass']);
     }
+
+    public function test_grid_fins_and_airbrakes_deploy_without_procedural_or_runtime_active_flags(): void
+    {
+        $document = json_decode(self::workspace(), true);
+        foreach ($document['Assemblies'][0]['Assembly']['parts'] as $i => &$part) {
+            $part['partName'] = $i === 0 ? 'gridfin_2v_radial' : 'airbrake_1v';
+            $part['PartModulesState'] = [['ModuleData' => [['Name' => 'Data_ControlSurface', 'DataObject' => ['Deploy' => ['storedValue' => false], 'DeployAngle' => ['storedValue' => 'NaN'], 'IsCtrlSurfaceActive' => false]]]]];
+        }
+        unset($part);
+        $json = json_encode($document, JSON_THROW_ON_ERROR);
+        $preview = app(VesselWorkspace::class)->convert($json);
+        $this->assertSame([true, true], array_column($preview['parts'], 'canDeploy'));
+        $individual = app(VesselWorkspace::class)->edit($json, ['deployment' => ['root' => true]]);
+        $this->assertSame([true, false], array_column($individual['parts'], 'deployed'));
+        $deployed = app(VesselWorkspace::class)->edit($json, ['all_deployed' => true]);
+        $this->assertSame([true, true], array_column($deployed['parts'], 'deployed'));
+        $this->assertSame('NaN', $deployed['parts'][0]['controls'][0]['DeployAngle']['storedValue']);
+        $this->assertFalse($deployed['parts'][0]['controls'][0]['IsCtrlSurfaceActive']);
+        $this->assertSame([false, false], array_column(app(VesselWorkspace::class)->edit($deployed['contents'], ['all_deployed' => false])['parts'], 'deployed'));
+    }
 }

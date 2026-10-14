@@ -340,7 +340,7 @@ def main():
         if args.parts and name not in args.parts: continue
         entry = catalog['parts'].get(name, {}) if args.procedural_only else {"mass": definition.get("mass"), "category": definition.get("category"), "resources": {r["name"]:r for r in definition.get("resourceContainers", [])}, "hashes": {}}
         if args.procedural_only:
-            if not any(m.get('Name') in ['Data_Fairing','Data_ProceduralPart'] for p in definition.get('serializedPartModules',[]) for m in p.get('ModuleData',[])): continue
+            if not any(m.get('Name') in ['Data_Fairing','Data_ProceduralPart','Data_ControlSurface'] for p in definition.get('serializedPartModules',[]) for m in p.get('ModuleData',[])): continue
         prefab = select_prefab(args.assets, name)
         if prefab is None and not args.procedural_only:
             entry['warnings'] = ['No exported prefab; preview uses an approximation.']

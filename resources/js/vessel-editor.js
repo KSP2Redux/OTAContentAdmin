@@ -3,6 +3,7 @@ import './vessel-editor.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { placeTravelArrow, projectedBounds } from './vessel-travel-arrow';
 import { buildSavedProcedural } from './procedural-vessel';
 
@@ -19,12 +20,16 @@ function boot() {
     const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 1000000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor('#101b2c');
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.35;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
+    const room = new RoomEnvironment(), pmrem = new THREE.PMREMGenerator(renderer);
+    const environment = pmrem.fromScene(room,0.04); scene.environment = environment.texture; scene.environmentIntensity = 0.8;
+    room.dispose(); pmrem.dispose();
+    const previewMaterial = () => new THREE.MeshStandardMaterial({color:0xb8c0c8,metalness:0.6,roughness:0.38,side:THREE.DoubleSide});
     $('canvas').append(renderer.domElement);
     const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
-    scene.add(new THREE.HemisphereLight(0xcbdfff, 0x263144, 2.4));
-    const key = new THREE.DirectionalLight(0xffead5, 4); key.position.set(20, 35, 45); scene.add(key);
-    const fill = new THREE.DirectionalLight(0x77aaff, 2); fill.position.set(-35, 5, -20); scene.add(fill);
+    scene.add(new THREE.HemisphereLight(0xcbdfff, 0x263144, 1.2));
+    const key = new THREE.DirectionalLight(0xffead5, 2); key.position.set(20, 35, 45); scene.add(key);
+    const fill = new THREE.DirectionalLight(0x77aaff, 1); fill.position.set(-35, 5, -20); scene.add(fill);
     let vessel = new THREE.Group(); scene.add(vessel);
     const localBounds = new THREE.Box3(), vesselBounds = new THREE.Box3();
     const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 8, 0x38bdf8, 2, 1);
@@ -80,9 +85,12 @@ function boot() {
         vesselBounds.copy(localBounds).applyMatrix4(vessel.matrixWorld);
         placeTravelArrow(arrow, vesselBounds, camera, new THREE.Vector3(0, 1, 0).applyQuaternion(vessel.quaternion));
     }
-    function orient() {
-        playback = null; vessel.position.set(0, 0, 0); vessel.quaternion.copy(pose()); vessel.updateMatrixWorld(true);
-        home.copy(new THREE.Box3().setFromObject(vessel).getCenter(new THREE.Vector3())).negate(); vessel.position.copy(home); frame();
+    function orient(resetFrame = false) {
+        playback = null; vessel.quaternion.copy(pose()); vessel.position.copy(home);
+        if (resetFrame) {
+            vessel.position.set(0, 0, 0); vessel.updateMatrixWorld(true);
+            home.copy(new THREE.Box3().setFromObject(vessel).getCenter(new THREE.Vector3())).negate(); vessel.position.copy(home); frame();
+        } else updateArrow();
     }
     async function display(result, initial = false) {
         const fresh = initial || workspace === null;
@@ -90,7 +98,7 @@ function boot() {
         if (fresh) { $('name').value = result.metadata.VehicleName || result.metadata.Name; $('mass').value = result.metadata.Mass || ''; }
         $('stats').textContent = `${result.parts.length} parts  /  ${result.assemblies} ${result.assemblies === 1 ? 'assembly' : 'assemblies'}  /  ${(result.bytes/1024).toFixed(0)} KiB`;
         listParts(); disposeVessel(); vessel = new THREE.Group(); scene.add(vessel); nodes.clear(); partWarnings.clear(); modelCount = 0; missingCount = 0;
-        let proceduralCount = 0, approximateShapes = 0;
+        let proceduralCount = 0, controlPoses = 0, approximateShapes = 0;
         const version = ++renderVersion;
         for (const part of result.parts) {
             message(`Loading preview: ${nodes.size+1} / ${result.parts.length} parts...`);
@@ -101,12 +109,13 @@ function boot() {
             const model = catalog.parts[part.name];
             const url = model?.[part.deployed === true ? 'extended' : 'retracted'];
             let generated = null;
-            if (part.procedural?.length || part.fairings?.length) {
+            if (part.procedural?.length || part.fairings?.length || part.controls?.length) {
                 try {
                     if (!model?.procedural) throw new Error('Procedural model data is unavailable; default geometry is shown.');
                     const spec = await fetchProcedural(model.procedural); if (version !== renderVersion) return;
                     generated = buildSavedProcedural(spec, part);
                     proceduralCount += generated.shapes;
+                    controlPoses += generated.controlPoses;
                     if (generated.warnings.length) { partWarnings.set(part.guid, generated.warnings); approximateShapes++; }
                 } catch(error) { partWarnings.set(part.guid,[error.message]); approximateShapes++; }
             }
@@ -116,25 +125,25 @@ function boot() {
                 try {
                     const gltf = await fetchModel(url); if (version !== renderVersion) return;
                     const object = gltf.scene.clone(true);
-                    object.traverse(mesh => { if (mesh.isMesh) { if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals(); mesh.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(...part.color), metalness: 0.25, roughness: 0.6, side: THREE.DoubleSide }); mesh.userData.guid = part.guid; } });
+                    object.traverse(mesh => { if (mesh.isMesh) { if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals(); mesh.material = previewMaterial(); mesh.userData.guid = part.guid; } });
                     group.add(object); modelCount++; modelLoaded = true;
                 } catch { missingCount++; }
             } else missingCount++;
             if (generated) {
-                generated.object.traverse(mesh => { if (mesh.isMesh) { mesh.material.dispose(); mesh.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(...part.color), metalness: 0.25, roughness: 0.6, side: THREE.DoubleSide }); mesh.userData.guid = part.guid; } });
+                generated.object.traverse(mesh => { if (mesh.isMesh) { mesh.material.dispose(); mesh.material = previewMaterial(); mesh.userData.guid = part.guid; } });
                 group.add(generated.object);
             }
             if (!modelLoaded) {
                 const bounds = model?.bounds, size = bounds ? bounds.max.map((v,i) => Math.max(v-bounds.min[i], 0.1)) : [1.25,2,1.25];
                 if (part.deployed !== null) size[1] *= part.deployed ? 3 : 0.5;
-                const geometry = new THREE.BoxGeometry(...size); const material = new THREE.MeshStandardMaterial({ color: 0x667085, wireframe: true });
+                const geometry = new THREE.BoxGeometry(...size); const material = previewMaterial(); material.wireframe = true;
                 const mesh = new THREE.Mesh(geometry, material); mesh.userData.guid = part.guid; mesh.userData.placeholder = true; group.add(mesh);
             }
             vessel.add(group); nodes.set(part.guid, group);
         }
-        $('model-status').textContent = `${modelCount} real part models  /  ${missingCount} approximations${proceduralCount ? '  /  '+proceduralCount+' saved procedural shapes' : ''}${approximateShapes ? '  /  '+approximateShapes+' procedural approximations' : ''}${Object.keys(catalog.parts).length ? '' : '. Import a private model package to enable geometry.'}`;
+        $('model-status').textContent = `${modelCount} real part models  /  ${missingCount} approximations${proceduralCount ? '  /  '+proceduralCount+' saved procedural shapes' : ''}${controlPoses ? '  /  '+controlPoses+' control-surface poses' : ''}${approximateShapes ? '  /  '+approximateShapes+' procedural approximations' : ''}${Object.keys(catalog.parts).length ? '' : '. Import a private model package to enable geometry.'}`;
         localBounds.setFromObject(vessel);
-        orient(); choose(selected); message(result.notes?.length ? result.notes.join(' ') : 'Workspace ready to review.'); setBusy(false);
+        orient(fresh); choose(selected); message(result.notes?.length ? result.notes.join(' ') : 'Workspace ready to review.'); setBusy(false);
     }
     const edit = guard(async options => display(await request(config.editUrl, { contents: workspace.contents, ...options })));
     $('file').addEventListener('change', guard(async () => { const file = $('file').files[0]; if (!file) return; const form = new FormData(); form.set('file', file); selected = null; const result = await request(config.convertUrl, form, true); $('slug').value = file.name.replace(/\.json$/i, '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); $('action').value = 'add'; await display(result, true); }));
@@ -145,7 +154,7 @@ function boot() {
     $('plus').onclick = () => workspace && edit({ rotation: { axis: $('axis').value, degrees: 90 } });
     $('flip').onclick = () => workspace && edit({ rotation: { axis: $('axis').value, degrees: 180 } });
     $('search').oninput = () => { listParts(); if (selected && $('part').value !== selected) choose(null); }; $('part').onchange = () => choose($('part').value);
-    $('pose').onchange = orient; $('frame').onclick = frame;
+    $('pose').onchange = () => orient(); $('frame').onclick = frame;
     $('rest').onclick = () => { playback = null; vessel.position.copy(home); };
     const fly = kind => {
         if (!workspace) return;
@@ -163,7 +172,7 @@ function boot() {
     config.changeSets.forEach(changeSet => $('change-set').add(new Option(changeSet.summary, changeSet.id)));
     let frameId;
     function tick() {
-        if (!host.isConnected) { cancelAnimationFrame(frameId); observer.disconnect(); controls.dispose(); disposeVessel(); renderer.dispose(); return; }
+        if (!host.isConnected) { cancelAnimationFrame(frameId); observer.disconnect(); controls.dispose(); disposeVessel(); environment.dispose(); renderer.dispose(); return; }
         frameId = requestAnimationFrame(tick);
         if (playback) { const t = Math.min((performance.now()-playback.start)/playback.duration, 1); const shaped = playback.kind === 'out' ? t*t*t : 1-(1-t)*(1-t)*(1-t); vessel.position.copy(home).addScaledVector(playback.offset, playback.kind === 'out' ? shaped : shaped-1); if (t === 1) playback = null; }
         if (selection.visible && nodes.has(selected)) selection.setFromObject(nodes.get(selected));

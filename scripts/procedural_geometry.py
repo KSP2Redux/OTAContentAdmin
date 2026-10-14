@@ -31,11 +31,16 @@ def model_matrix(docs, exporter):
     return world(node) if node is not None else np.eye(4)
 
 
-def rig(path, guids, exporter):
+def rig(path, guids, exporter, managed_only=True):
     docs = exporter.expand_prefab(path, guids)
     transforms = {i: d for i, (t, d) in docs.items() if t == 4}
     games = {i: d for i, (t, d) in docs.items() if t == 1}
     game_transforms = {d["m_GameObject"]["fileID"]: i for i, d in transforms.items()}
+    if not managed_only:
+        for d in transforms.values():
+            if d['m_Father']['fileID'] not in transforms:
+                d['m_LocalPosition'] = dict.fromkeys('xyz', 0)
+                d['m_LocalRotation'] = dict(zip('xyzw', [0, 0, 0, 1]))
     nodes = [{"id": str(i), "name": games[d["m_GameObject"]["fileID"]]["m_Name"],
               "parent": str(d["m_Father"]["fileID"]), "position": vector(d.get("m_LocalPosition")),
               "rotation": vector(d.get("m_LocalRotation"), "xyzw"), "scale": vector(d.get("m_LocalScale"), default=1)}
@@ -60,7 +65,7 @@ def rig(path, guids, exporter):
                           for d in slider.get("dynamicLimits", [])]
                 sliders.append({"name": slider["Name"], "default": slider.get("startValue", 0),
                                 "neutral": neutral, "limits": limits, "targets": targets})
-        if kind in (1818360608, 1818360610, 1183024399, 895512359) and data.get("m_Enabled", 1):
+        if kind in (1818360608, 1818360610, 1183024399, 895512359) and data.get("m_Enabled", 1) and (managed_only or data.get('m_Active', 1)):
             # OffsetSliderSystem.Initialize activates even authored inactive constraints.
             targets = [{"node": str(s["sourceTransform"]["fileID"]), "weight": float(s["weight"])} for s in data.get("m_Sources", [])]
             if not targets: continue
@@ -74,12 +79,19 @@ def rig(path, guids, exporter):
                                 "upVector": vector(data.get("m_WorldUpVector", {"x": 0, "y": 1, "z": 0})),
                                 "roll": float(data.get("m_Roll", 0)), "weight": float(data.get("m_Weight", 1))})
             if kind == 895512359: constraints[-1]["useUp"] = bool(data.get("m_WorldUpObject", {}).get("fileID"))
+    excluded_lods = set()
+    for kind, data in docs.values():
+        if kind == 205 and data.get('m_LODs'):
+            lods = data['m_LODs']; keep = {r['renderer']['fileID'] for r in lods[min(1, len(lods)-1)].get('renderers', [])}
+            excluded_lods.update({r['renderer']['fileID'] for lod in lods for r in lod.get('renderers', [])}-keep)
     for ident, (kind, renderer) in docs.items():
-        if kind not in (23, 137) or ident not in managed: continue
+        if kind not in (23, 137) or (managed_only and ident not in managed): continue
+        if not managed_only and (ident in excluded_lods or not renderer.get('m_Enabled', 1)): continue
         tid = game_transforms[renderer["m_GameObject"]["fileID"]]
         ancestor, excluded = tid, False
         while ancestor in transforms:
-            if is_helper(games[transforms[ancestor]["m_GameObject"]["fileID"]]["m_Name"]): excluded = True; break
+            game = games[transforms[ancestor]["m_GameObject"]["fileID"]]
+            if is_helper(game["m_Name"]) or (not managed_only and not game.get('m_IsActive', 1)): excluded = True; break
             ancestor = transforms[ancestor]["m_Father"]["fileID"]
         if excluded: continue
         filters = [d for t, d in docs.values() if t == 33 and d["m_GameObject"]["fileID"] == renderer["m_GameObject"]["fileID"]]
@@ -89,7 +101,7 @@ def rig(path, guids, exporter):
         positions, indices, weights, joints, binds = exporter.mesh(str(source))
         if joints is not None and weights is not None and weights.shape[1] < joints.shape[1]:
             weights = np.column_stack([weights, 1-weights.sum(axis=1)])
-        name, attach = managed[ident]
+        name, attach = managed.get(ident, (games[renderer['m_GameObject']['fileID']]['m_Name'], '0'))
         meshes.append({"name": name, "node": str(tid), "attach": attach,
                        "positions": positions.reshape(-1).tolist(), "indices": indices.tolist(),
                        "bones": [str(b["fileID"]) for b in renderer.get("m_Bones", [])],
@@ -103,14 +115,15 @@ def rig(path, guids, exporter):
 def export_part(assets, guids, definition, exporter):
     fairings = modules(definition, "Data_Fairing")
     procedural = modules(definition, "Data_ProceduralPart")
-    if not fairings and not procedural: return None
+    controls = modules(definition, 'Data_ControlSurface')
+    if not fairings and not procedural and not controls: return None
     name = definition["partName"]
     address = Path(definition.get("_previewPrefab") or name).stem
     prefab = exporter.select_prefab(assets, address)
     docs = exporter.expand_prefab(prefab, guids) if prefab else {}
     model = model_matrix(docs, exporter)
     result = {"version": 1, "fairings": [{"defaults": f, "modelMatrix": model.T.reshape(-1).tolist()} for f in fairings],
-              "controls": modules(definition, "Data_ControlSurface"), "procedural": [], "warnings": []}
+              "controls": controls, "procedural": [], "warnings": []}
     components = [d for t, d in docs.values() if t == 114 and "_meshOptionPrefabs" in d]
     for component in components:
         options = []
@@ -124,5 +137,8 @@ def export_part(assets, guids, definition, exporter):
         rotate = np.array([[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
         result["procedural"].append({"options": options, "modelMatrix": (model @ rotate).T.reshape(-1).tolist()})
     if procedural and not components: result["warnings"].append("No exported procedural rig; saved shape cannot be previewed.")
+    if controls and not procedural:
+        try: result['controlRig'] = rig(prefab, guids, exporter, managed_only=False)
+        except Exception as exception: result['warnings'].append('Control-surface export: '+str(exception))
     if fairings and not prefab: result["warnings"].append("Fairing model transform is unavailable; placement uses the part origin.")
     return result

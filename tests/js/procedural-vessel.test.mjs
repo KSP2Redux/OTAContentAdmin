@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { buildFairing, buildWing, solveRig, sampleCurve, resolvedFairingStartHeight } from '../../resources/js/procedural-vessel.js';
+import { buildFairing, buildWing, solveRig, sampleCurve, resolvedFairingStartHeight, buildControlSurface } from '../../resources/js/procedural-vessel.js';
 
 const identity = new THREE.Matrix4().toArray();
 const node = (id, parent, p) => ({id,name:id,parent,position:p,rotation:[0,0,0,1],scale:[1,1,1]});
@@ -58,4 +58,14 @@ test('downward shrouds start at the mounting plate and enclose the engine',()=>{
     const shell=buildFairing(definition,{CrossSections:[{Height:start,Radius:1},{Height:start+definition.CrossSectionHeightMax,Radius:1}]},identity);
     const engine=new THREE.Box3(new THREE.Vector3(-.99,-1.49,-.99),new THREE.Vector3(.99,.49,.99));
     assert.ok(new THREE.Box3().setFromObject(shell).containsBox(engine));
+});
+
+test('ordinary grid fin hinges rotate rigid mesh descendants and preserve the base',()=>{
+    const copy=structuredClone(rig);copy.sliders=[];copy.constraints=[];copy.nodes[1].position=[0,0,0];copy.nodes[1].name='hinge';copy.meshes[0].bones=[];copy.meshes[0].binds=[];copy.meshes[0].weights=null;copy.meshes[0].joints=null;copy.meshes[0].node='tip';copy.meshes[0].positions=[1,0,0, 2,0,0, 1,1,0];
+    copy.meshes.push({...copy.meshes[0],node:'root',positions:[3,0,0, 4,0,0, 3,1,0]});
+    const control={CtrlSurfacePivotTransformName:'hinge',CtrlSurfaceDeployTransformName:'default',CtrlTransformRotAxis:'Z',UseCtrlSurfaceDeployAngle:true,CtrlSurfaceDeployAngle:90,DeployAngle:{storedValue:'NaN'},Deploy:{storedValue:true}};
+    const mesh=buildControlSurface(copy,control);
+    assert.ok(Math.abs(mesh.children[0].geometry.attributes.position.getX(0))<1e-6);
+    assert.equal(mesh.children[0].geometry.attributes.position.getY(0),1);
+    assert.equal(mesh.children[1].geometry.attributes.position.getX(0),3);
 });

@@ -18,7 +18,7 @@ export function sampleCurve(keys, time) {
     return cubic(a.value, a.value + a.outSlope*duration*out, b.value - b.inSlope*duration*incoming, b.value, (low + high)/2);
 }
 
-export function solveRig(rig, state = {}) {
+export function solveRig(rig, state = {}, poses = []) {
     const nodes = new Map(rig.nodes.map(n => [n.id, { ...n, p: vector(n.position), q: new THREE.Quaternion(...n.rotation), s: vector(n.scale) }]));
     const world = new Map();
     function refresh() {
@@ -50,6 +50,7 @@ export function solveRig(rig, state = {}) {
         if (offsets.has(`${node.id}:1`)) { const e = new THREE.Euler().setFromQuaternion(node.q, 'ZXY'); node.q.copy(unityEuler([e.x, e.y, e.z].map(THREE.MathUtils.radToDeg).map((v,i) => v + offsets.get(`${node.id}:1`).getComponent(i)))); }
         if (offsets.has(`${node.id}:2`)) node.s.add(offsets.get(`${node.id}:2`));
     }
+    for (const pose of poses) if (nodes.has(pose.node)) nodes.get(pose.node).q.multiply(pose.rotation);
     refresh();
     const decompose = matrix => { const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(); matrix.decompose(p,q,s); return {p,q,s}; };
     const weighted = (sources, map, property) => {
@@ -94,18 +95,25 @@ export function solveRig(rig, state = {}) {
     return { nodes, world };
 }
 
-export function buildWing(rig, state, mirrored, modelMatrix, control = {}) {
-    const { nodes, world } = solveRig(rig, state), result = new THREE.Group(), modelTransform = new THREE.Matrix4().fromArray(modelMatrix);
+function controlPose(control) {
     const pivotName = control.CtrlSurfaceDeployTransformName && control.CtrlSurfaceDeployTransformName !== 'default' ? control.CtrlSurfaceDeployTransformName : control.CtrlSurfacePivotTransformName;
-    const pivot = [...nodes.values()].find(n => n.name === pivotName);
+    const separate = control.CtrlSurfaceDeployTransformName && control.CtrlSurfaceDeployTransformName !== 'default';
+    const axisName = separate ? 'DeployTransformRotAxis' : 'CtrlTransformRotAxis';
+    const axis = {X:[1,0,0],Y:[0,1,0],Z:[0,0,1]}[control[axisName]] ?? [[1,0,0],[0,1,0],[0,0,1]][control[axisName] ?? 0];
+    const sign = (control.CtrlTransformSign ?? 1) * (!separate && control.MirrorDeploy && control.ReverseMirrorDeployement ? -1 : 1);
+    let angle = Number(value(control.DeployAngle, NaN));
+    if (!Number.isFinite(angle)) angle = control.UseCtrlSurfaceDeployAngle ? control.CtrlSurfaceDeployAngle ?? 15 : control.CtrlSurfaceRange ?? 15;
+    return {pivotName, axis:vector(axis), angle:THREE.MathUtils.degToRad((value(control.Deploy,false) ? angle : 0)*sign)};
+}
+
+export function buildWing(rig, state, mirrored, modelMatrix, control = {}, nodeDeployment = false) {
+    const pose = controlPose(control), target = rig.nodes.find(n => n.name === pose.pivotName);
+    const poses = nodeDeployment && target ? [{node:target.id,rotation:new THREE.Quaternion().setFromAxisAngle(pose.axis,pose.angle)}] : [];
+    const { nodes, world } = solveRig(rig, state, poses), result = new THREE.Group(), modelTransform = new THREE.Matrix4().fromArray(modelMatrix);
+    const pivot = [...nodes.values()].find(n => n.name === pose.pivotName);
     let deployment = null;
-    if (pivot && value(control.Deploy, false)) {
-        const axisName = control.CtrlSurfaceDeployTransformName && control.CtrlSurfaceDeployTransformName !== 'default' ? 'DeployTransformRotAxis' : 'CtrlTransformRotAxis';
-        const axis = {X:[1,0,0],Y:[0,1,0],Z:[0,0,1]}[control[axisName]] ?? [[1,0,0],[0,1,0],[0,0,1]][control[axisName] ?? 0];
-        const sign = (control.CtrlTransformSign ?? 1) * (control.MirrorDeploy && control.ReverseMirrorDeployement ? -1 : 1);
-        let angle = Number(value(control.DeployAngle, control.CtrlSurfaceDeployAngle ?? control.CtrlSurfaceRange ?? 15));
-        if (!Number.isFinite(angle)) angle = control.UseCtrlSurfaceDeployAngle ? control.CtrlSurfaceDeployAngle ?? 15 : control.CtrlSurfaceRange ?? 15;
-        const neutral = world.get(pivot.id), rotation = new THREE.Matrix4().makeRotationAxis(vector(axis), THREE.MathUtils.degToRad(angle*sign));
+    if (!nodeDeployment && pivot && value(control.Deploy, false)) {
+        const neutral = world.get(pivot.id), rotation = new THREE.Matrix4().makeRotationAxis(pose.axis,pose.angle);
         deployment = neutral.clone().multiply(rotation).multiply(neutral.clone().invert());
     }
     for (const mesh of rig.meshes) {
@@ -126,6 +134,10 @@ export function buildWing(rig, state, mirrored, modelMatrix, control = {}) {
         const object = new THREE.Mesh(geometry); object.userData.procedural = true; result.add(object);
     }
     return result;
+}
+
+export function buildControlSurface(rig, control) {
+    return buildWing(rig,{},false,new THREE.Matrix4().toArray(),control,true);
 }
 
 export function resolvedFairingStartHeight(definition, modelMatrix) {
@@ -182,12 +194,16 @@ export function buildFairing(definition, saved = {}, modelMatrix) {
 }
 
 export function buildSavedProcedural(spec, part) {
-    const object = new THREE.Group(), warnings = [...(spec.warnings ?? [])]; let replacesModel = false, shapes = 0;
+    const object = new THREE.Group(), warnings = [...(spec.warnings ?? [])]; let replacesModel = false, shapes = 0, controlPoses = 0;
     for (let i=0;i<(part.procedural ?? []).length;i++) {
         const state=part.procedural[i],definition=spec.procedural[i],rig=definition?.options[state.meshOptionIndex ?? 0];
         if (!rig) {warnings.push('Saved procedural mesh variant is unavailable.');continue;}
         const wing=buildWing(rig,state,part.mirrored,definition.modelMatrix,{...(spec.controls[i] ?? {}),...(part.controls[i] ?? {})});object.add(wing);replacesModel=true;shapes++;
     }
+    if (spec.controlRig && !(part.procedural ?? []).length) {
+        object.add(buildControlSurface(spec.controlRig,{...(spec.controls[0] ?? {}),...(part.controls[0] ?? {})}));
+        replacesModel=true;controlPoses++;
+    }
     for (let i=0;i<spec.fairings.length;i++) { const entry=spec.fairings[i],fairing=buildFairing(entry.defaults,part.fairings[i] ?? {},entry.modelMatrix);if(fairing){object.add(fairing);shapes++;} }
-    return {object,replacesModel,shapes,warnings};
+    return {object,replacesModel,shapes,controlPoses,warnings};
 }
