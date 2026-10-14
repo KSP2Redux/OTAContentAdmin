@@ -3,19 +3,16 @@
 namespace App\Filament\Resources\ChangeSets\Pages;
 
 use App\Filament\Resources\ChangeSets\ChangeSetResource;
-use App\Services\Integrations\GitHubContentRepository;
+use App\Filament\Support\ChangeSetDrafts;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class CreateChangeSet extends CreateRecord
 {
     protected static string $resource = ChangeSetResource::class;
 
-    protected function mutateFormDataBeforeCreate(array $data): array
+    protected function handleRecordCreation(array $data): Model
     {
-        $data['user_id'] = auth()->id();
-        $data['base_content_sha'] = app(GitHubContentRepository::class)->headSha();
-        $data['state'] = 'draft';
-
-        return $data;
+        return ChangeSetDrafts::create($data, notify: false);
     }
 }

@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\ChangeSetDrafts;
 use App\Models\ChangeSet;
 use App\Services\Content\CompatibilityCatalog;
+use Filament\Actions\Action;
 use Filament\Pages\Page;
 
 class VesselEditor extends Page
@@ -16,6 +18,13 @@ class VesselEditor extends Page
 
     protected static ?int $navigationSort = 2;
 
+    public function createChangeSetAction(): Action
+    {
+        return ChangeSetDrafts::action('createChangeSet', function (ChangeSet $changeSet): void {
+            $this->dispatch('ota-change-set-created', id: $changeSet->getKey(), summary: $changeSet->summary);
+        });
+    }
+
     public function getViewData(): array
     {
         return ['editorConfig' => [
@@ -23,7 +32,7 @@ class VesselEditor extends Page
             'catalogUrl' => route('vessel.models.catalog'), 'publishedUrl' => url('/admin/vessel-tools/published'),
             'path' => request()->query('path'), 'bodyOptions' => app(CompatibilityCatalog::class)->bodies(),
             'operation' => request()->query('operation'), 'draftUrl' => url('/admin/vessel-tools/draft'),
-            'changeSets' => ChangeSet::query()->whereIn('state', ['draft', 'validated'])->get(['id', 'summary'])->toArray(),
+            'changeSets' => collect(ChangeSetDrafts::options())->map(fn (string $summary, string $id): array => ['id' => $id, 'summary' => $summary])->values()->all(),
             'csrf' => csrf_token(),
         ]];
     }

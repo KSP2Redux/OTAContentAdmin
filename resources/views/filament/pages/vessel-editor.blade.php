@@ -38,6 +38,7 @@
                 <p id="ve-part-note" class="ve-note">Select a part in the list or click it in the preview.</p>
                 <h2>Stage change</h2>
                 <label>Change set <select id="ve-change-set"><option value="">Choose a draft change set</option></select></label>
+                <button id="ve-create-change-set" type="button" x-on:click="$wire.mountAction('createChangeSet')">+ Create change set</button>
                 <label>Operation <select id="ve-action"><option value="add">Add</option><option value="replace">Replace</option></select></label>
                 <label>Filename slug <input id="ve-slug" pattern="[a-z0-9][a-z0-9-]*" placeholder="my-station"></label>
                 <button id="ve-stage" disabled>Save to change set</button>

@@ -170,9 +170,19 @@ function boot() {
     config.bodyOptions.forEach(body => $('body').add(new Option(body, body)));
     $('body').value = 'Kerbin';
     config.changeSets.forEach(changeSet => $('change-set').add(new Option(changeSet.summary, changeSet.id)));
+    const onChangeSetCreated = event => {
+        const {id, summary} = event.detail;
+        if (!host.isConnected || typeof id !== 'string' || typeof summary !== 'string') return;
+        let option = Array.from($('change-set').options).find(option => option.value === id);
+        if (option) option.textContent = summary;
+        else $('change-set').add(new Option(summary, id));
+        $('change-set').value = id;
+        message('Change set created. Ready to save your change.');
+    };
+    window.addEventListener('ota-change-set-created', onChangeSetCreated);
     let frameId;
     function tick() {
-        if (!host.isConnected) { cancelAnimationFrame(frameId); observer.disconnect(); controls.dispose(); disposeVessel(); environment.dispose(); renderer.dispose(); return; }
+        if (!host.isConnected) { window.removeEventListener('ota-change-set-created', onChangeSetCreated); cancelAnimationFrame(frameId); observer.disconnect(); controls.dispose(); disposeVessel(); environment.dispose(); renderer.dispose(); return; }
         frameId = requestAnimationFrame(tick);
         if (playback) { const t = Math.min((performance.now()-playback.start)/playback.duration, 1); const shaped = playback.kind === 'out' ? t*t*t : 1-(1-t)*(1-t)*(1-t); vessel.position.copy(home).addScaledVector(playback.offset, playback.kind === 'out' ? shaped : shaped-1); if (t === 1) playback = null; }
         if (selection.visible && nodes.has(selected)) selection.setFromObject(nodes.get(selected));

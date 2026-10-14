@@ -2,8 +2,7 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Resources\ChangeSets\ChangeSetResource;
-use App\Models\ChangeSet;
+use App\Filament\Support\ChangeSetDrafts;
 use App\Services\Content\CompatibilityCatalog;
 use App\Services\Content\ContentHandlerRegistry;
 use App\Services\Content\Data\UploadedArtifact;
@@ -27,7 +26,7 @@ class Missions extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('newChangeSet')->label('New change set')->url(ChangeSetResource::getUrl('create')),
+            ChangeSetDrafts::action('newChangeSet')->label('New change set'),
             $this->uploadAction('add', 'Add mission'), $this->uploadAction('replace', 'Replace mission'),
             Action::make('reorder')->label('Reorder mission')->schema([
                 $this->changeSetSelect(), Select::make('path')->options($this->pathOptions())->required(),
@@ -78,7 +77,7 @@ class Missions extends Page
 
     private function changeSetSelect(): Select
     {
-        return Select::make('change_set_id')->label('Draft change set')->options(ChangeSet::query()->whereIn('state', ['draft', 'validated'])->pluck('summary', 'id'))->required();
+        return ChangeSetDrafts::select();
     }
 
     private function pathOptions(): array
