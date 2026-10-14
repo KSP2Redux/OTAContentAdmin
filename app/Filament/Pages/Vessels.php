@@ -11,6 +11,7 @@ use App\Services\Integrations\GitHubContentRepository;
 use App\Services\Publishing\OperationStager;
 use App\Support\SecretRedactor;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -30,16 +31,18 @@ class Vessels extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('newChangeSet')->label('New change set')->url(ChangeSetResource::getUrl('create')),
             Action::make('prepare')->label('Prepare and preview vessel')->url(VesselEditor::getUrl()),
-            $this->uploadAction('add', 'Add vessel'), $this->uploadAction('replace', 'Replace vessel'),
-            Action::make('reorder')->label('Reorder vessel')->schema([
-                $this->changeSetSelect(), Select::make('path')->options($this->pathOptions())->required(),
-                TextInput::make('order_position')->numeric()->minValue(1)->required(),
-            ])->action(fn (array $data) => $this->stage('reorder', $data)),
-            Action::make('delete')->label('Delete vessel')->color('danger')->requiresConfirmation()->schema([
-                $this->changeSetSelect(), Select::make('path')->options($this->pathOptions())->required(),
-            ])->action(fn (array $data) => $this->stage('delete', $data)),
+            Action::make('newChangeSet')->label('New change set')->color('gray')->url(ChangeSetResource::getUrl('create')),
+            ActionGroup::make([
+                $this->uploadAction('add', 'Add vessel'), $this->uploadAction('replace', 'Replace vessel'),
+                Action::make('reorder')->label('Reorder vessel')->schema([
+                    $this->changeSetSelect(), Select::make('path')->options($this->pathOptions())->required(),
+                    TextInput::make('order_position')->numeric()->minValue(1)->required(),
+                ])->action(fn (array $data) => $this->stage('reorder', $data)),
+                Action::make('delete')->label('Delete vessel')->color('danger')->requiresConfirmation()->schema([
+                    $this->changeSetSelect(), Select::make('path')->options($this->pathOptions())->required(),
+                ])->action(fn (array $data) => $this->stage('delete', $data)),
+            ])->label('Manage vessels')->icon('heroicon-m-ellipsis-horizontal')->color('gray')->button(),
         ];
     }
 

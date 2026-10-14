@@ -1,4 +1,4 @@
-<x-filament-panels::page>
+<x-filament-panels::page class="ota-vessels-page">
     @if ($error)
         <div class="rounded-lg bg-danger-50 p-4 text-danger-700 dark:bg-danger-950 dark:text-danger-300">
             {{ $error }}
@@ -9,57 +9,95 @@
         heading="Published vessels"
         description="Changes become visible after a later game startup."
     >
-        <x-ota.table label="Published main-menu vessels">
-            <thead>
-                <tr>
-                    <th scope="col" class="ota-table-number">Order</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">File</th>
-                    <th scope="col">Author</th>
-                    <th scope="col">Body</th>
-                    <th scope="col" class="ota-table-number">Parts</th>
-                    <th scope="col" class="ota-table-number">Mass</th>
-                    <th scope="col">Bounds</th>
-                    <th scope="col" class="ota-table-number">Bytes</th>
-                    <th scope="col">SHA-256</th>
-                    <th scope="col"><span class="sr-only">Actions</span></th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse ($items as $item)
+        <div class="ota-vessels">
+            <x-ota.table label="Published main-menu vessels" class="ota-vessels-table">
+                <thead>
                     <tr>
-                        <td class="ota-table-number">{{ $item['order'] }}</td>
-                        <td class="ota-table-primary">{{ $item['name'] }}</td>
-                        <td>
-                            <code class="ota-table-code" title="{{ $item['path'] }}">{{ $item['path'] }}</code>
-                        </td>
-                        <td>{{ $item['author'] }}</td>
-                        <td>{{ $item['body'] }}</td>
-                        <td class="ota-table-number">{{ number_format($item['parts']) }}</td>
-                        <td class="ota-table-number">{{ number_format($item['mass'] ?? 0, 2) }} t</td>
-                        <td class="whitespace-nowrap">{{ $item['size'] }}</td>
-                        <td class="ota-table-number">{{ number_format(($item['bytes'] ?? 0) / 1024) }} KiB</td>
-                        <td>
-                            <code class="ota-table-code ota-table-hash" title="{{ $item['sha256'] }}">{{ $item['sha256'] }}</code>
-                        </td>
-                        <td>
-                            <a class="ota-table-download" href="{{ \App\Filament\Pages\VesselEditor::getUrl(['path' => $item['path']]) }}">Preview / edit</a>
-                            <a
-                                class="ota-table-download"
-                                href="{{ route('content.download', ['channel' => 'main-menu-vessels', 'path' => $item['path']]) }}"
-                                title="Download {{ $item['path'] }}"
-                            >
-                                <x-filament::icon icon="heroicon-m-arrow-down-tray" class="size-4" />
-                                <span>Download</span>
-                            </a>
-                        </td>
+                        <th scope="col">Vessel</th>
+                        <th scope="col" class="ota-vessel-orbit">Orbit</th>
+                        <th scope="col" class="ota-vessel-stats">Parts / mass</th>
+                        <th scope="col" class="ota-vessel-actions-cell">Actions</th>
                     </tr>
+                </thead>
+                @forelse ($items as $item)
+                    <tbody x-data="{ detailsOpen: false }" class="ota-vessel-group">
+                        <tr class="ota-vessel-row">
+                            <td class="ota-vessel-identity">
+                                <div class="ota-vessel-heading">
+                                    <span class="ota-vessel-order" title="Menu order {{ $item['order'] }}"><span class="sr-only">Menu order </span>{{ $item['order'] }}</span>
+                                    <span class="ota-table-primary">{{ $item['name'] }}</span>
+                                </div>
+                                <p class="ota-vessel-author">by {{ $item['author'] }}</p>
+                                <button
+                                    type="button"
+                                    class="ota-vessel-details-toggle"
+                                    aria-expanded="false"
+                                    x-bind:aria-expanded="detailsOpen.toString()"
+                                    aria-controls="vessel-details-{{ $loop->index }}"
+                                    aria-label="File details for {{ $item['name'] }}"
+                                    x-on:click="detailsOpen = ! detailsOpen"
+                                >
+                                    <x-filament::icon icon="heroicon-m-chevron-right" class="size-4" x-bind:class="{ 'ota-vessel-details-open': detailsOpen }" />
+                                    <span>File details</span>
+                                </button>
+                            </td>
+                            <td class="ota-vessel-orbit">
+                                <span class="ota-vessel-mobile-label">Orbit</span>
+                                <span>{{ $item['body'] }}</span>
+                            </td>
+                            <td class="ota-vessel-stats">
+                                <span>{{ number_format($item['parts']) }} parts</span>
+                                <span class="ota-vessel-mass">{{ isset($item['mass']) ? number_format($item['mass'], 2).' t' : 'Mass unavailable' }}</span>
+                            </td>
+                            <td class="ota-vessel-actions-cell">
+                                <div class="ota-vessel-actions" role="group" aria-label="Actions for {{ $item['name'] }}">
+                                    <x-filament::button tag="a" size="sm" :href="\App\Filament\Pages\VesselEditor::getUrl(['path' => $item['path']])">
+                                        Preview / edit
+                                    </x-filament::button>
+                                    <x-filament::button
+                                        tag="a"
+                                        size="sm"
+                                        color="gray"
+                                        icon="heroicon-m-arrow-down-tray"
+                                        :href="route('content.download', ['channel' => 'main-menu-vessels', 'path' => $item['path']])"
+                                        title="Download {{ $item['path'] }}"
+                                    >
+                                        Download
+                                    </x-filament::button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr class="ota-vessel-details" id="vessel-details-{{ $loop->index }}" x-show="detailsOpen" x-cloak>
+                            <td colspan="4">
+                                <dl class="ota-vessel-file-info">
+                                    <div>
+                                        <dt>File</dt>
+                                        <dd><code>{{ $item['path'] }}</code></dd>
+                                    </div>
+                                    <div>
+                                        <dt>File size</dt>
+                                        <dd>{{ number_format(($item['bytes'] ?? 0) / 1024) }} KiB</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Dimensions</dt>
+                                        <dd>{{ $item['size'] ?? 'Unavailable' }}</dd>
+                                    </div>
+                                    <div class="ota-vessel-checksum">
+                                        <dt>SHA-256</dt>
+                                        <dd><code>{{ $item['sha256'] }}</code></dd>
+                                    </div>
+                                </dl>
+                            </td>
+                        </tr>
+                    </tbody>
                 @empty
-                    <tr class="ota-table-empty">
-                        <td colspan="11">No vessels could be loaded.</td>
-                    </tr>
+                    <tbody>
+                        <tr class="ota-table-empty">
+                            <td colspan="4">{{ $error ? 'No vessels could be loaded.' : 'No vessels are currently published.' }}</td>
+                        </tr>
+                    </tbody>
                 @endforelse
-            </tbody>
-        </x-ota.table>
+            </x-ota.table>
+        </div>
     </x-filament::section>
 </x-filament-panels::page>

@@ -56,7 +56,7 @@ class AuthorizationTest extends TestCase
             ->assertSee('aria-label="Published main-menu vessels"', escape: false)
             ->assertSee('class="ota-table-shell"', escape: false)
             ->assertSee('class="ota-table-empty"', escape: false)
-            ->assertSee('No vessels could be loaded.');
+            ->assertSee('No vessels are currently published.');
 
         $this->actingAs($user)
             ->get('/admin/missions')
