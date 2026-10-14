@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import struct
 import subprocess
+import sys
 import numpy as np
 import yaml
 from preview_geometry import is_helper
@@ -20,6 +21,8 @@ def unity(path):
     ids = re.findall(r"^--- !u!(\d+) &(-?\d+)", text, re.M)
     text = re.sub(r"^%.*\n", "", text, flags=re.M)
     text = re.sub(r"^--- !u!\d+ &-?\d+.*$", "---", text, flags=re.M)
+    # Numeric-only hex buffers are bytes, not YAML integers or scientific notation.
+    text = re.sub(r"^(\s*(?:_typelessdata|m_IndexBuffer):)\s+([a-fA-F0-9]+)\s*$", lambda match: match[1]+" "+json.dumps(match[2]), text, flags=re.M)
     return {int(i): (int(t), next(iter(d.values()))) for (t, i), d in zip(ids, yaml.load_all(text, Loader=yaml.CSafeLoader)) if d}
 
 
@@ -282,6 +285,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--redux-definitions", type=Path)
     parser.add_argument("--parts", nargs="*", help="Optional part names; omitted means all part definitions")
+    parser.add_argument("--procedural-only", action="store_true", help="Enrich an existing package with procedural geometry")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     cache = args.output/'guid-index.json'
@@ -309,7 +313,9 @@ def main():
             if not isinstance(document, dict): continue
             data = document.get("data", {})
             if not isinstance(data, dict): continue
-            if "partName" in data: definitions[data["partName"]] = data
+            if "partName" in data:
+                data['_previewPrefab'] = document.get('PrefabAddress')
+                definitions[data["partName"]] = data
             elif "massPerUnit" in data: resources[data["name"]] = data["massPerUnit"]
             elif "recipeData" in document:
                 resources[document['recipeData']['name']] = document['recipeData']['ingredients']
@@ -325,17 +331,20 @@ def main():
     resources = resolved
     catalog = {"version": 1, "parts": {}, "resources": resources}
     existing_catalog=args.output/'catalog.json'
-    if args.parts and existing_catalog.exists():
+    if (args.parts or args.procedural_only) and existing_catalog.exists():
         catalog=json.loads(existing_catalog.read_text(encoding='utf-8'))
         catalog['resources'].update(resources)
     errors = []
+    from procedural_geometry import export_part
     for name, definition in sorted(definitions.items()):
         if args.parts and name not in args.parts: continue
-        entry = {"mass": definition.get("mass"), "category": definition.get("category"), "resources": {r["name"]:r for r in definition.get("resourceContainers", [])}, "hashes": {}}
+        entry = catalog['parts'].get(name, {}) if args.procedural_only else {"mass": definition.get("mass"), "category": definition.get("category"), "resources": {r["name"]:r for r in definition.get("resourceContainers", [])}, "hashes": {}}
+        if args.procedural_only:
+            if not any(m.get('Name') in ['Data_Fairing','Data_ProceduralPart'] for p in definition.get('serializedPartModules',[]) for m in p.get('ModuleData',[])): continue
         prefab = select_prefab(args.assets, name)
-        if prefab is None:
+        if prefab is None and not args.procedural_only:
             entry['warnings'] = ['No exported prefab; preview uses an approximation.']
-        else:
+        elif prefab is not None and not args.procedural_only:
             entry['prefab'] = prefab.name
             for pose in ['retracted', 'extended']:
                 try:
@@ -348,6 +357,15 @@ def main():
                     entry.setdefault('pose_clips', {})[pose] = clips
                     entry.setdefault('warnings', []).extend(warnings)
                 except Exception as e: entry.setdefault('warnings', []).append(pose+': '+str(e));errors.append({'part':name,'pose':pose,'error':str(e)})
+        try:
+            specification = export_part(args.assets, guids, definition, sys.modules[__name__])
+            if specification:
+                filename = name+'.procedural.json'
+                (args.output/filename).write_text(json.dumps(specification,separators=(',',':'),allow_nan=False),encoding='utf-8')
+                entry['procedural'] = filename
+                entry.setdefault('hashes',{})['procedural'] = hashlib.sha256((args.output/filename).read_bytes()).hexdigest()
+        except Exception as exception:
+            entry.setdefault('warnings',[]).append('Procedural export: '+str(exception));errors.append({'part':name,'pose':'procedural','error':str(exception)})
         catalog['parts'][name] = entry
         print(json.dumps({'part': name, 'models': sum(p in entry for p in ['retracted','extended']), 'warnings': len(entry.get('warnings', []))}), flush=True)
     (args.output/'catalog.json').write_text(json.dumps(catalog,separators=(',',':')),encoding='utf-8')

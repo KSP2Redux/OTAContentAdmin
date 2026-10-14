@@ -35,6 +35,10 @@ return [
             'root' => storage_path('app/vessel-models'),
             'serve' => false,
             'throw' => true,
+            'permissions' => [
+                'file' => ['public' => 0660, 'private' => 0660],
+                'dir' => ['public' => 0770, 'private' => 0770],
+            ],
         ],
 
         'ota-private' => [

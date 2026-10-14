@@ -21,7 +21,9 @@ Static validation does **not** launch KSP2 or prove gameplay behavior.
 
 Open **OTA content > Vessel editor**, or choose **Preview / edit** on a published or staged vessel. Upload an OAB workspace or serialized assembly JSON. Assemblies are wrapped automatically, legacy embedded assembly strings are decoded, the main assembly is placed first, and saved numeric tokens are preserved during deployment edits. Uploaded source files can be up to 50 MiB; the converted OTA payload must still fit within 10 MiB. Missing assembly mass is estimated from the private part definitions and stored resources; enter it manually when a part or resource is unknown.
 
-The Three.js preview uses untextured part models with a simple lit material. Select a part in the viewport or list to deploy/retract it, or use the bulk controls. Fixed parts have no deployment control. Changes update both the preview and the downloadable workspace. Whole-vessel quarter-turns help align engines and the vessel's front with the travel arrow. Both upright and leaning menu poses are available. Fly-in and fly-out use the game's +Y nose direction, cubic easing, 2.5/5-second timing and approximate renderer-relative travel distances. This preview does not reproduce the game's procedural geometry, textures, exhaust or lighting exactly.
+The Three.js preview uses untextured part models with a simple lit material. Saved procedural wings, stabilizers, control surfaces, fins and body flaps select their authored mesh variant, apply slider limits and bone constraints, and retain mirrored geometry and submesh visibility. Fairings, engine shrouds and procedural tubes are built from their saved cross-sections, with the part definition supplying the correct axis, model transform, wall thickness and cap settings. Parts without exported prefab metadata report an approximation in the preview.
+
+Select a part in the viewport or list to deploy/retract it, or use the bulk controls. For fairings and shrouds, **jettisoned** removes the shell; clearing it restores the saved profile. Procedural control surfaces use their saved deployment angle. Fixed parts have no deployment control. Changes update both the preview and the downloadable workspace, preserving unrelated procedural settings and numeric tokens. Whole-vessel quarter-turns help align engines and the vessel's front with the travel arrow, which stays outside the vessel's projected bounds. Both upright and leaning menu poses are available. Fly-in and fly-out use the game's +Y nose direction, cubic easing, 2.5/5-second timing and approximate renderer-relative travel distances. This preview does not reproduce textures, exhaust or game lighting exactly.
 
 Saving from the editor stages a draft operation; existing validation, publication, cancellation, stale-content protection and rollback remain in use. No edit publishes directly. **Preview / edit** on a draft operation reopens its stored payload.
 
@@ -35,6 +37,8 @@ python scripts/export-vessel-models.py --assets "C:\Games\KSP Stuff\KSP 2 Moddin
 
 The exporter selects the full part prefab by its part definition, preserving inherited model scale even when AssetRipper gives a model leaf the unsuffixed filename. It reads prefab transforms, nested prefabs, meshes, skinning and deployment animation endpoints without executing Unity scripts. Collision and reentry helpers are excluded through their entire hierarchy. It generates retracted and extended GLBs, private part/resource definitions, hashes and an export report. Python needs `numpy` and `PyYAML`; `rg.exe` must be on PATH. Remove `guid-index.json` when changing the source asset export so its reference cache is rebuilt.
 
+Procedural rigs and fairing defaults are stored in private `.procedural.json` files alongside the GLBs. To enrich an existing package without rebaking the static models, add `--procedural-only` to the export command, then reimport it. The catalog and every referenced file must be transferred together; imports verify their SHA-256 checksums. Procedural data uses the same authenticated publisher routes as the models.
+
 Redux FBX models absent from the stock export can be added with an installed Blender in a separate background process:
 
 ```powershell
@@ -44,7 +48,7 @@ php artisan vessels:import-models storage/app/model-package
 
 The FBX supplement bakes imported animation endpoints; prefab offsets and controller animations outside the FBX are approximate. Unsupported parts use wireframe approximations and are counted in the preview. Copy the model package privately to the server and run the same import command inside the app container with its `ota_models` volume mounted. The package is separate from the application image; never add the generated GLBs to Git. Reimport after changing or extending the part library.
 
-For browser acceptance checks, `tests/browser/vessel-editor.mjs` exercises a local isolated, authenticated fixture with Edge through Playwright. It checks visible rendering, individual deployment, both poses and flight directions, rotation, numeric-preserving downloads and draft staging. It expects the local fixture session under the SDK `.agents/ota-admin-preview-20261014` directory; those fixture helpers are not deployed.
+For browser acceptance checks, `tests/browser/vessel-editor.mjs` exercises a local isolated, authenticated fixture with Edge through Playwright. It checks visible rendering, individual deployment, both poses and flight directions, rotation, numeric-preserving downloads and draft staging. `tests/browser/procedural-vessel.mjs` additionally checks saved wing shapes and mirroring, control-surface deployment, shroud coverage against the actual engine bounds, jettison/restoration, bulk controls and unchanged downloaded profiles. These scripts expect an imported private model library and the local fixture session under the SDK `.agents/ota-admin-preview-20261014` directory; those fixture helpers are not deployed.
 
 ## Local setup
 
@@ -55,7 +59,10 @@ composer install
 cp .env.example .env
 php artisan key:generate
 php artisan migrate
+npm ci
+npm run build
 php artisan test
+npm run test:geometry
 php artisan serve
 ```
 

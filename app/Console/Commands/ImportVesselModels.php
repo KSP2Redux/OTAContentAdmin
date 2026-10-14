@@ -29,18 +29,22 @@ class ImportVesselModels extends Command
             if (! preg_match('/\A[a-z0-9][a-z0-9._-]*\z/', $name) || str_contains($name, '..')) {
                 throw new RuntimeException('Unsafe part identifier.');
             }
-            foreach (['retracted', 'extended'] as $pose) {
+            foreach (['retracted', 'extended', 'procedural'] as $pose) {
                 $file = $entry[$pose] ?? null;
                 if ($file === null) {
                     continue;
                 }
                 $source = realpath($root.'/'.$file);
-                if (! preg_match('/\A[a-z0-9][a-z0-9._-]*\.glb\z/', $file) || str_contains($file, '..') || ! $source || dirname($source) !== $root || filesize($source) > 50 * 1024 * 1024) {
+                $extension = $pose === 'procedural' ? 'json' : 'glb';
+                if (! preg_match('/\A[a-z0-9][a-z0-9._-]*\.'.$extension.'\z/', $file) || str_contains($file, '..') || ! $source || dirname($source) !== $root || filesize($source) > 50 * 1024 * 1024) {
                     throw new RuntimeException('Unsafe model path.');
                 }
                 $contents = file_get_contents($source);
-                if (substr($contents, 0, 4) !== 'glTF' || ! hash_equals($entry['hashes'][$pose] ?? '', hash('sha256', $contents))) {
+                if (($pose !== 'procedural' && substr($contents, 0, 4) !== 'glTF') || ! hash_equals($entry['hashes'][$pose] ?? '', hash('sha256', $contents))) {
                     throw new RuntimeException('Model checksum or GLB header does not match.');
+                }
+                if ($pose === 'procedural' && (json_decode($contents, true, 128, JSON_THROW_ON_ERROR)['version'] ?? null) !== 1) {
+                    throw new RuntimeException('Unsupported procedural model data.');
                 }
                 $disk->put($file, $contents);
             }

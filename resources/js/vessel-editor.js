@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { placeTravelArrow, projectedBounds } from './vessel-travel-arrow';
+import { buildSavedProcedural } from './procedural-vessel';
 
 function boot() {
     const host = document.getElementById('vessel-editor');
@@ -13,7 +14,7 @@ function boot() {
     const $ = id => host.querySelector(`#ve-${id}`);
     let workspace = null, catalog = { parts: {} }, selected = null, renderVersion = 0, playback = null, home = new THREE.Vector3();
     let busy = false, modelCount = 0, missingCount = 0;
-    const nodes = new Map(), modelCache = new Map(), loader = new GLTFLoader();
+    const nodes = new Map(), modelCache = new Map(), proceduralCache = new Map(), partWarnings = new Map(), loader = new GLTFLoader();
     const scene = new THREE.Scene(); scene.background = new THREE.Color('#101b2c');
     const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 1000000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -43,14 +44,16 @@ function boot() {
     };
     const guard = task => async (...args) => { if (busy) return; setBusy(true); try { await task(...args); } catch (error) { message(error.message, true); choose(selected); } finally { setBusy(false); } };
     const fetchModel = url => { if (!modelCache.has(url)) modelCache.set(url, loader.loadAsync(url)); return modelCache.get(url); };
+    const fetchProcedural = url => { if (!proceduralCache.has(url)) proceduralCache.set(url, fetch(url).then(async response => { if (!response.ok) throw new Error('Procedural model data is unavailable.'); return response.json(); })); return proceduralCache.get(url); };
     const pose = () => $('pose').value === 'leaning' ? new THREE.Quaternion(-0.4744, 0, -0.2726, 0.837).normalize() : new THREE.Quaternion();
-    const disposeVessel = () => { vessel.traverse(o => { if (o.isMesh) { o.material.dispose(); if (o.userData.placeholder) o.geometry.dispose(); } }); scene.remove(vessel); };
+    const disposeVessel = () => { vessel.traverse(o => { if (o.isMesh) { o.material.dispose(); if (o.userData.placeholder || o.userData.procedural) o.geometry.dispose(); } }); scene.remove(vessel); };
     function choose(guid) {
         selected = guid; $('part').value = guid ?? '';
         const part = workspace?.parts.find(p => p.guid === guid), node = nodes.get(guid);
         $('deployed').disabled = !part || part.deployed === null || part.canDeploy === false;
         $('deployed').checked = part?.deployed === true;
-        $('part-note').textContent = part ? `${part.name.replaceAll('_', ' ')}${part.canDeploy === false ? '  /  fixed part' : part.deployed === null ? '  /  no deployment control' : ''}${catalog.parts[part.name]?.warnings?.length ? ' / approximate model pose' : ''}` : 'Select a part.';
+        $('deploy-label').textContent = part?.deploymentKind === 'fairing' ? 'Fairing / shroud jettisoned' : part?.deploymentKind === 'control' ? 'Control surface deployed' : 'Deployed';
+        $('part-note').textContent = part ? `${part.name.replaceAll('_', ' ')}${part.canDeploy === false ? '  /  fixed part' : part.deployed === null ? '  /  no deployment control' : ''}${partWarnings.get(part.guid)?.length ? ' / '+partWarnings.get(part.guid).join(' ') : catalog.parts[part.name]?.warnings?.length ? ' / approximate model pose' : ''}` : 'Select a part.';
         selection.visible = !!node; if (node) selection.setFromObject(node);
     }
     function listParts() {
@@ -86,7 +89,8 @@ function boot() {
         workspace = result;
         if (fresh) { $('name').value = result.metadata.VehicleName || result.metadata.Name; $('mass').value = result.metadata.Mass || ''; }
         $('stats').textContent = `${result.parts.length} parts  /  ${result.assemblies} ${result.assemblies === 1 ? 'assembly' : 'assemblies'}  /  ${(result.bytes/1024).toFixed(0)} KiB`;
-        listParts(); disposeVessel(); vessel = new THREE.Group(); scene.add(vessel); nodes.clear(); modelCount = 0; missingCount = 0;
+        listParts(); disposeVessel(); vessel = new THREE.Group(); scene.add(vessel); nodes.clear(); partWarnings.clear(); modelCount = 0; missingCount = 0;
+        let proceduralCount = 0, approximateShapes = 0;
         const version = ++renderVersion;
         for (const part of result.parts) {
             message(`Loading preview: ${nodes.size+1} / ${result.parts.length} parts...`);
@@ -96,15 +100,31 @@ function boot() {
             if (group.quaternion.lengthSq() === 0) group.quaternion.identity(); else group.quaternion.normalize();
             const model = catalog.parts[part.name];
             const url = model?.[part.deployed === true ? 'extended' : 'retracted'];
-            if (url) {
+            let generated = null;
+            if (part.procedural?.length || part.fairings?.length) {
+                try {
+                    if (!model?.procedural) throw new Error('Procedural model data is unavailable; default geometry is shown.');
+                    const spec = await fetchProcedural(model.procedural); if (version !== renderVersion) return;
+                    generated = buildSavedProcedural(spec, part);
+                    proceduralCount += generated.shapes;
+                    if (generated.warnings.length) { partWarnings.set(part.guid, generated.warnings); approximateShapes++; }
+                } catch(error) { partWarnings.set(part.guid,[error.message]); approximateShapes++; }
+            }
+            let modelLoaded = !!generated?.replacesModel;
+            if (generated?.replacesModel) modelCount++;
+            else if (url) {
                 try {
                     const gltf = await fetchModel(url); if (version !== renderVersion) return;
                     const object = gltf.scene.clone(true);
                     object.traverse(mesh => { if (mesh.isMesh) { if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals(); mesh.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(...part.color), metalness: 0.25, roughness: 0.6, side: THREE.DoubleSide }); mesh.userData.guid = part.guid; } });
-                    group.add(object); modelCount++;
+                    group.add(object); modelCount++; modelLoaded = true;
                 } catch { missingCount++; }
             } else missingCount++;
-            if (!group.children.length) {
+            if (generated) {
+                generated.object.traverse(mesh => { if (mesh.isMesh) { mesh.material.dispose(); mesh.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(...part.color), metalness: 0.25, roughness: 0.6, side: THREE.DoubleSide }); mesh.userData.guid = part.guid; } });
+                group.add(generated.object);
+            }
+            if (!modelLoaded) {
                 const bounds = model?.bounds, size = bounds ? bounds.max.map((v,i) => Math.max(v-bounds.min[i], 0.1)) : [1.25,2,1.25];
                 if (part.deployed !== null) size[1] *= part.deployed ? 3 : 0.5;
                 const geometry = new THREE.BoxGeometry(...size); const material = new THREE.MeshStandardMaterial({ color: 0x667085, wireframe: true });
@@ -112,7 +132,7 @@ function boot() {
             }
             vessel.add(group); nodes.set(part.guid, group);
         }
-        $('model-status').textContent = `${modelCount} real part models  /  ${missingCount} approximations${Object.keys(catalog.parts).length ? '' : '. Import a private model package to enable geometry.'}`;
+        $('model-status').textContent = `${modelCount} real part models  /  ${missingCount} approximations${proceduralCount ? '  /  '+proceduralCount+' saved procedural shapes' : ''}${approximateShapes ? '  /  '+approximateShapes+' procedural approximations' : ''}${Object.keys(catalog.parts).length ? '' : '. Import a private model package to enable geometry.'}`;
         localBounds.setFromObject(vessel);
         orient(); choose(selected); message(result.notes?.length ? result.notes.join(' ') : 'Workspace ready to review.'); setBusy(false);
     }

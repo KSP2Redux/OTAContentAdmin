@@ -21,7 +21,7 @@
                     <span>Arrow shows travel direction. Drag to orbit; scroll to zoom.</span>
                 </div>
                 <p id="ve-model-status" class="ve-note">Private part models are loading.</p>
-                <p class="ve-note">Untextured model preview. Flight paths and display poses approximate the game's menu; procedural shapes and effects may differ.</p>
+                <p class="ve-note">Untextured model preview with saved procedural wings and fairing profiles. Flight paths, display poses, lighting and effects approximate the game's menu.</p>
             </section>
             <aside class="ve-sidebar">
                 <h2>Vessel</h2>
@@ -34,7 +34,7 @@
                 <div class="ve-buttons"><button id="ve-deploy-all">Deploy all</button><button id="ve-retract-all">Retract all</button></div>
                 <label>Find part <input id="ve-search" placeholder="Filter by part name"></label>
                 <label>Part <select id="ve-part" size="8" aria-label="Vessel parts"></select></label>
-                <label class="ve-checkbox"><input id="ve-deployed" type="checkbox" disabled> Deployed</label>
+                <label class="ve-checkbox"><input id="ve-deployed" type="checkbox" disabled> <span id="ve-deploy-label">Deployed</span></label>
                 <p id="ve-part-note" class="ve-note">Select a part in the list or click it in the preview.</p>
                 <h2>Stage change</h2>
                 <label>Change set <select id="ve-change-set"><option value="">Choose a draft change set</option></select></label>

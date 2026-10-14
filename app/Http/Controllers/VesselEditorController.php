@@ -90,7 +90,7 @@ class VesselEditorController extends Controller
     {
         $catalog = $library->catalog();
         foreach ($catalog['parts'] as $name => &$part) {
-            foreach (['retracted', 'extended'] as $pose) {
+            foreach (['retracted', 'extended', 'procedural'] as $pose) {
                 $part[$pose] = isset($part[$pose]) ? route('vessel.models.file', ['part' => $name, 'pose' => $pose]).'?v='.($part['hashes'][$pose] ?? '') : null;
             }
         }
@@ -100,12 +100,13 @@ class VesselEditorController extends Controller
 
     public function model(string $part, string $pose, PartModelLibrary $library)
     {
-        abort_unless(preg_match('/\A[a-z0-9][a-z0-9._-]*\z/', $part) && ! str_contains($part, '..') && in_array($pose, ['retracted', 'extended'], true), 404);
+        abort_unless(preg_match('/\A[a-z0-9][a-z0-9._-]*\z/', $part) && ! str_contains($part, '..') && in_array($pose, ['retracted', 'extended', 'procedural'], true), 404);
         $entry = $library->catalog()['parts'][$part] ?? null;
         $path = $entry[$pose] ?? null;
-        abort_unless(is_string($path) && preg_match('/\A[a-z0-9][a-z0-9._-]*\.glb\z/', $path) && ! str_contains($path, '..'), 404);
+        $extension = $pose === 'procedural' ? 'json' : 'glb';
+        abort_unless(is_string($path) && preg_match('/\A[a-z0-9][a-z0-9._-]*\.'.$extension.'\z/', $path) && ! str_contains($path, '..'), 404);
         abort_unless(Storage::disk('vessel-models')->exists($path), 404);
 
-        return Storage::disk('vessel-models')->response($path, null, ['Content-Type' => 'model/gltf-binary', 'Cache-Control' => 'private, max-age=3600', 'X-Content-Type-Options' => 'nosniff']);
+        return Storage::disk('vessel-models')->response($path, null, ['Content-Type' => $pose === 'procedural' ? 'application/json' : 'model/gltf-binary', 'Cache-Control' => 'private, max-age=3600', 'X-Content-Type-Options' => 'nosniff']);
     }
 }

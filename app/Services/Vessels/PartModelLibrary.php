@@ -25,6 +25,16 @@ final class PartModelLibrary
                 return null;
             }
             $mass += $definition['mass'];
+            foreach ($part['PartModulesState'] ?? [] as $module) {
+                foreach ($module['ModuleData'] ?? [] as $entry) {
+                    if (in_array($entry['Name'] ?? '', ['Data_ProceduralPart', 'Data_Fairing'], true)) {
+                        $modifier = $entry['DataObject']['MassModifierAmount'] ?? 0;
+                        if (is_numeric($modifier) && is_finite((float) $modifier)) {
+                            $mass += (float) $modifier;
+                        }
+                    }
+                }
+            }
             $saved = $part['partState']['resources'] ?? null;
             $resources = $saved ?? $definition['resources'] ?? [];
             foreach ($resources as $name => $state) {

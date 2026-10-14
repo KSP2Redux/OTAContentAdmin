@@ -35,6 +35,7 @@ jobs:
         run: |
           npm ci
           npm run build
+          npm run test:geometry
       - name: Check formatting
         run: vendor/bin/pint --test
       - name: Run tests

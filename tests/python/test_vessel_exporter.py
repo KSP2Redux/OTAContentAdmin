@@ -59,6 +59,14 @@ class VesselExporterTests(unittest.TestCase):
         for name in ["collector_1v_radial", "Center Column", "shared_colony_hatch", "solararray_3v_large"]:
             self.assertFalse(is_helper(name), name)
 
+    def test_numeric_hex_buffers_are_not_interpreted_as_yaml_numbers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)/"mesh.asset"
+            source.write_text('--- !u!43 &1\nMesh:\n  m_IndexBuffer: 000001000200\n  m_VertexData:\n    _typelessdata: 000000000000\n', encoding='utf-8')
+            data = exporter.unity(source)[1][1]
+            self.assertEqual(data['m_IndexBuffer'], '000001000200')
+            self.assertEqual(data['m_VertexData']['_typelessdata'], '000000000000')
+
 
 if __name__ == "__main__":
     unittest.main()

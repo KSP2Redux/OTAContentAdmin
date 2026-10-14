@@ -59,6 +59,26 @@ final readonly class VesselWorkspace
             }
         }
         unset($placed);
+        $moduleChanges = [];
+        foreach ($data['Assemblies'] as $ai => $placed) {
+            foreach ($placed['Assembly']['parts'] as $pi => $part) {
+                foreach ($part['PartModulesState'] ?? [] as $mi => $module) {
+                    foreach ($module['ModuleData'] ?? [] as $di => $entry) {
+                        if (empty($entry['DataObject']) && is_string($entry['Data'] ?? null) && json_validate($entry['Data'])) {
+                            $raw = $this->normalizer->normalize($entry['Data'], true);
+                            if (is_array(json_decode($raw, true))) {
+                                $moduleChanges[LosslessJsonEditor::pointer(['Assemblies', $ai, 'Assembly', 'parts', $pi, 'PartModulesState', $mi, 'ModuleData', $di, 'DataObject'])] = new RawJsonValue($raw);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if ($moduleChanges) {
+            $contents = $this->editor->patch($contents, $moduleChanges);
+            $data = json_decode($contents, true, 128, JSON_THROW_ON_ERROR);
+            $notes[] = 'Legacy serialized part modules decoded.';
+        }
         $main = $this->mainIndex($data);
         if ($main !== 0) {
             $paths = array_map(fn ($i) => '/Assemblies/'.$i, array_keys($data['Assemblies']));
@@ -105,16 +125,29 @@ final readonly class VesselWorkspace
                 }
                 foreach ($part['PartModulesState'] ?? [] as $mi => $module) {
                     foreach ($module['ModuleData'] ?? [] as $di => $entry) {
-                        if (($entry['Name'] ?? '') !== 'Data_Deployable' || ($entry['DataObject']['UseAnimation'] ?? true) === false) {
-                            continue;
-                        }
                         if (! array_key_exists('all_deployed', $options) && ! array_key_exists($guid, $requested)) {
                             continue;
                         }
                         $extended = (bool) ($requested[$guid] ?? $options['all_deployed']);
-                        $matched[$guid] = true;
                         $base = array_merge($prefix, ['PartModulesState', $mi, 'ModuleData', $di, 'DataObject']);
                         $object = $entry['DataObject'] ?? [];
+                        $type = $entry['Name'] ?? '';
+                        if ($type === 'Data_Fairing' && ($object['FairingEnabled']['storedValue'] ?? true) && count($object['CrossSections'] ?? []) >= 2) {
+                            $changes[LosslessJsonEditor::pointer(isset($object['IsDeployed']) ? [...$base, 'IsDeployed', 'storedValue'] : [...$base, 'IsDeployed'])] = isset($object['IsDeployed']) ? $extended : ['storedValue' => $extended];
+                            $matched[$guid] = true;
+
+                            continue;
+                        }
+                        if ($type === 'Data_ControlSurface' && $this->hasProceduralModule($part) && ($object['IsCtrlSurfaceActive'] ?? true)) {
+                            $changes[LosslessJsonEditor::pointer(isset($object['Deploy']) ? [...$base, 'Deploy', 'storedValue'] : [...$base, 'Deploy'])] = isset($object['Deploy']) ? $extended : ['storedValue' => $extended];
+                            $matched[$guid] = true;
+
+                            continue;
+                        }
+                        if ($type !== 'Data_Deployable' || ($object['UseAnimation'] ?? true) === false) {
+                            continue;
+                        }
+                        $matched[$guid] = true;
                         foreach (['CurrentDeployState' => $extended ? 'Extended' : 'Retracted', 'toggleExtend' => $extended,
                             'AnimationNormalizedTime' => $extended ? 1.0 : 0.0, 'DeployLimit' => 1.0] as $key => $value) {
                             $suffix = isset($object[$key]) ? [$key, 'storedValue'] : [$key];
@@ -172,12 +205,38 @@ final readonly class VesselWorkspace
             $deployable = null;
             $canDeploy = false;
             $color = [0.55, 0.6, 0.65];
+            $procedural = [];
+            $fairings = [];
+            $controls = [];
+            $deploymentKind = null;
             foreach ($part['PartModulesState'] ?? [] as $module) {
                 foreach ($module['ModuleData'] ?? [] as $entry) {
                     $object = $entry['DataObject'] ?? [];
                     if (($entry['Name'] ?? '') === 'Data_Deployable') {
-                        $deployable = in_array($object['CurrentDeployState']['storedValue'] ?? 'Retracted', ['Extended', 'Extending'], true);
-                        $canDeploy = $object['UseAnimation'] ?? true;
+                        if (($object['UseAnimation'] ?? true) || ! $canDeploy) {
+                            $deployable = in_array($object['CurrentDeployState']['storedValue'] ?? 'Retracted', ['Extended', 'Extending'], true);
+                            $canDeploy = $object['UseAnimation'] ?? true;
+                            $deploymentKind = 'animated';
+                        }
+                    }
+                    if (($entry['Name'] ?? '') === 'Data_ProceduralPart') {
+                        $procedural[] = $object;
+                    }
+                    if (($entry['Name'] ?? '') === 'Data_Fairing') {
+                        $fairings[] = $object;
+                        if (($object['FairingEnabled']['storedValue'] ?? true) && count($object['CrossSections'] ?? []) >= 2 && ! $canDeploy) {
+                            $deployable = $object['IsDeployed']['storedValue'] ?? false;
+                            $canDeploy = true;
+                            $deploymentKind = 'fairing';
+                        }
+                    }
+                    if (($entry['Name'] ?? '') === 'Data_ControlSurface') {
+                        $controls[] = $object;
+                        if ($this->hasProceduralModule($part) && ($object['IsCtrlSurfaceActive'] ?? true) && ! $canDeploy) {
+                            $deployable = $object['Deploy']['storedValue'] ?? false;
+                            $canDeploy = true;
+                            $deploymentKind = 'control';
+                        }
                     }
                     if (($entry['Name'] ?? '') === 'Data_Color' && isset($object['Base']['storedValue'])) {
                         $c = $object['Base']['storedValue'];
@@ -190,7 +249,8 @@ final readonly class VesselWorkspace
             $parts[] = ['guid' => $part['PartGuid']['Guid'], 'name' => $part['partName'],
                 'position' => array_map(fn ($k) => $position[$k] - $origin[$k], ['x', 'y', 'z']),
                 'rotation' => array_map(fn ($k) => $part['partState']['localRotation'][$k], ['x', 'y', 'z', 'w']),
-                'deployed' => $deployable, 'canDeploy' => $canDeploy, 'color' => $color];
+                'deployed' => $deployable, 'canDeploy' => $canDeploy, 'color' => $color, 'deploymentKind' => $deploymentKind,
+                'procedural' => $procedural, 'fairings' => $fairings, 'controls' => $controls, 'mirrored' => (bool) ($part['partState']['isMirrored'] ?? false)];
         }
 
         return ['contents' => $contents, 'metadata' => $data['Metadata'], 'parts' => $parts, 'notes' => $notes,
@@ -206,6 +266,19 @@ final readonly class VesselWorkspace
         }
 
         return 0;
+    }
+
+    private function hasProceduralModule(array $part): bool
+    {
+        foreach ($part['PartModulesState'] ?? [] as $module) {
+            foreach ($module['ModuleData'] ?? [] as $entry) {
+                if (($entry['Name'] ?? '') === 'Data_ProceduralPart') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function replaceRaw(string $contents, string $path, string $replacement): string

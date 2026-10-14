@@ -106,4 +106,43 @@ class VesselWorkspaceTest extends TestCase
         $this->assertStringContainsString('2.00000', $result['contents']);
         $this->assertCount(2, $result['parts']);
     }
+
+    public function test_fairing_and_procedural_control_surface_states_are_editable_without_changing_profiles(): void
+    {
+        $document = json_decode(self::workspace(), true);
+        $parts = &$document['Assemblies'][0]['Assembly']['parts'];
+        $fairing = ['CrossSections' => [['Height' => 0, 'Radius' => 1], ['Height' => 3, 'Radius' => .375]], 'FairingEnabled' => ['storedValue' => true]];
+        $parts[0]['PartModulesState'] = [['ModuleData' => [['Name' => 'Data_Fairing', 'DataObject' => $fairing]]]];
+        $parts[1]['PartModulesState'] = [['ModuleData' => [
+            ['Name' => 'Data_ProceduralPart', 'DataObject' => ['meshOptionIndex' => 1, 'sliderData' => ['WING_SPAN' => .3]]],
+            ['Name' => 'Data_ControlSurface', 'DataObject' => ['DeployAngle' => ['storedValue' => 20]]],
+        ]]];
+        $result = app(VesselWorkspace::class)->edit(json_encode($document, JSON_THROW_ON_ERROR), ['all_deployed' => true]);
+        $this->assertSame(['fairing', 'control'], array_column($result['parts'], 'deploymentKind'));
+        $this->assertSame([true, true], array_column($result['parts'], 'deployed'));
+        $this->assertSame($fairing['CrossSections'], $result['parts'][0]['fairings'][0]['CrossSections']);
+        $this->assertSame(.3, $result['parts'][1]['procedural'][0]['sliderData']['WING_SPAN']);
+        $retracted = app(VesselWorkspace::class)->edit($result['contents'], ['all_deployed' => false]);
+        $this->assertSame([false, false], array_column($retracted['parts'], 'deployed'));
+    }
+
+    public function test_legacy_procedural_module_is_decoded_without_losing_numeric_tokens(): void
+    {
+        $document = json_decode(self::workspace(), true);
+        $document['Assemblies'][0]['Assembly']['parts'][0]['PartModulesState'] = [['ModuleData' => [['Name' => 'Data_ProceduralPart', 'Data' => '{"meshOptionIndex":1,"sliderData":{"WING_SPAN":0.3000000},"tick":639275246455830892}']]]];
+        $result = app(VesselWorkspace::class)->convert(json_encode($document, JSON_THROW_ON_ERROR));
+        $this->assertStringContainsString('"WING_SPAN":0.3000000', $result['contents']);
+        $this->assertSame(1, $result['parts'][0]['procedural'][0]['meshOptionIndex']);
+    }
+
+    public function test_assembly_mass_includes_saved_procedural_mass_modifiers(): void
+    {
+        Storage::fake('vessel-models');
+        Storage::disk('vessel-models')->put('catalog.json', json_encode(['version' => 1, 'parts' => ['panel' => ['mass' => 2]], 'resources' => ['Fuel' => 1]], JSON_THROW_ON_ERROR));
+        $assembly = self::assembly();
+        $assembly['parts'][0]['PartModulesState'][] = ['ModuleData' => [['Name' => 'Data_ProceduralPart', 'DataObject' => ['MassModifierAmount' => -.5]]]];
+        $assembly['parts'][1]['PartModulesState'][] = ['ModuleData' => [['Name' => 'Data_Fairing', 'DataObject' => ['MassModifierAmount' => .25]]]];
+        $result = app(VesselWorkspace::class)->convert(json_encode($assembly, JSON_THROW_ON_ERROR));
+        $this->assertSame(6.25, $result['metadata']['Mass']);
+    }
 }
