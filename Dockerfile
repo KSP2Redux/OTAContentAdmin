@@ -4,7 +4,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader --no-scripts
 
-FROM node:22-alpine AS frontend
+FROM node:25-alpine AS frontend
 WORKDIR /app
 COPY --from=vendor /app/vendor/filament ./vendor/filament
 COPY package.json package-lock.json ./
@@ -14,7 +14,7 @@ COPY resources ./resources
 COPY app/Filament ./app/Filament
 RUN npm run build
 
-FROM php:8.3.36-apache-trixie@sha256:4aed5d62fe32801afa58b3d18c26b12aa86f25da27526c128cce99e63a38a4b0
+FROM php:8.5.0-apache-trixie@sha256:1d825469e3c69b10baf6a8a63b1e766b81c6edb44a01f91509fc148bfd0e5f3e
 RUN apt-get update && apt-get install -y --no-install-recommends libicu-dev libpq-dev libzip-dev unzip curl \
     && docker-php-ext-install intl pdo_pgsql zip opcache pcntl \
     && a2enmod rewrite headers \
