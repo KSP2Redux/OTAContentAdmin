@@ -19,7 +19,7 @@ services:
     environment: &app-environment
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_URL: https://ota-admin.rendezvous.dev
+      APP_URL: https://ota-admin.ksp2redux.org
       APP_KEY_FILE: /run/secrets/ota_app_key
       LOG_CHANNEL: stderr
       DB_CONNECTION: pgsql
@@ -37,8 +37,8 @@ services:
       SESSION_SECURE_COOKIE: "true"
       QUEUE_CONNECTION: redis
       REDIS_QUEUE_RETRY_AFTER: "3700"
-      AUTHENTIK_ISSUER: https://sso.rendezvous.dev/application/o/redux-ota-admin/
-      AUTHENTIK_REDIRECT_URI: https://ota-admin.rendezvous.dev/auth/callback
+      AUTHENTIK_ISSUER: https://sso.ksp2redux.org/application/o/redux-ota-admin/
+      AUTHENTIK_REDIRECT_URI: https://ota-admin.ksp2redux.org/auth/callback
       AUTHENTIK_PUBLISHER_GROUP: "Rendezvous Entertainment Content Managers"
       AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:?required}
       AUTHENTIK_CLIENT_SECRET_FILE: /run/secrets/ota_authentik_secret
@@ -46,7 +46,9 @@ services:
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:?required}
       GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/ota_github_private_key
       WEBLATE_TOKEN_FILE: /run/secrets/ota_weblate_token
-      GITLAB_TOKEN_FILE: /run/secrets/ota_gitlab_token
+      ONEDEV_TOKEN_FILE: /run/secrets/ota_onedev_token
+      WEBLATE_URL: https://translate.ksp2redux.org/api
+      WEBLATE_WEB_URL: https://translate.ksp2redux.org
     volumes: &app-volumes
       - ota_uploads:/var/www/html/storage/app/ota-private
       - ota_payloads:/var/www/html/storage/app/ota-payloads

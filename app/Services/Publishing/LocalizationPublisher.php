@@ -4,13 +4,13 @@ namespace App\Services\Publishing;
 
 use App\Models\PublishRun;
 use App\Services\Integrations\GitHubContentRepository;
-use App\Services\Integrations\GitLabClient;
+use App\Services\Integrations\OneDevClient;
 use App\Services\Integrations\WeblateClient;
 use RuntimeException;
 
 final readonly class LocalizationPublisher
 {
-    public function __construct(private WeblateClient $weblate, private GitLabClient $gitlab, private GitHubContentRepository $github) {}
+    public function __construct(private WeblateClient $weblate, private OneDevClient $onedev, private GitHubContentRepository $github) {}
 
     public function publish(PublishRun $run, ?callable $checkpoint = null): void
     {
@@ -24,11 +24,12 @@ final readonly class LocalizationPublisher
         $pushTask = $this->weblate->operation('push');
         $this->weblate->waitForTask($pushTask, $checkpoint);
         $repository = $this->weblate->status();
-        $run->update(['stage' => 'gitlab_pipeline']);
-        $pipeline = $this->gitlab->triggerOtaPipeline();
-        $run->update(['gitlab_pipeline_url' => $pipeline['web_url'] ?? null]);
-        $this->gitlab->waitForPipeline((int) $pipeline['id'], $checkpoint);
-        $this->gitlab->assertOnlyOtaJobRan((int) $pipeline['id']);
+        $run->update(['stage' => 'onedev_build']);
+        $build = $this->onedev->triggerOtaBuild();
+        // Keep the existing database column so historical runs remain readable
+        // and the integration change requires no schema migration.
+        $run->update(['gitlab_pipeline_url' => $build['web_url']]);
+        $this->onedev->waitForBuild($build['id'], $build['commitHash'], $checkpoint);
         $run->update(['stage' => 'verify_content']);
         $manifest = $this->github->manifest('localizations');
         foreach ($manifest['files'] ?? [] as $entry) {

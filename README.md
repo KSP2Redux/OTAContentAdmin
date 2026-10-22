@@ -2,7 +2,7 @@
 
 Laravel 13 / Filament 4 application for publishing KSP2 Redux OTA localizations, main-menu vessels, and missions. The source is public at `KSP2Redux/OTAContentAdmin`, while access to the deployed administration interface remains restricted through Authentik. `KSP2Redux/Content` remains the live source of truth; this application stores drafts, validation results, publication attempts, and audit history.
 
-GitHub hosts this application's source and container images. GitLab is only an integration used to trigger and monitor the existing Ksp2Redux localization publication job.
+GitHub hosts this application's source and container images. OneDev runs the existing Ksp2Redux localization publication job.
 
 ## Implemented workflows
 
@@ -10,7 +10,7 @@ GitHub hosts this application's source and container images. GitLab is only an i
 - Draft changesets for vessel and mission add, replace, delete, and reorder operations.
 - Private uploads, JSON inspection, lossless vessel normalization, compatibility validation, deterministic manifests, and atomic GitHub commits.
 - Missing mission localization-key discovery and English source-unit creation through Weblate.
-- Queued Weblate commit/push, GitLab OTA pipeline, and published localization verification.
+- Queued Weblate commit/push, OneDev OTA publication, and published localization verification.
 - Publication history, stale-content protection, a global publication lock, dry-run validation, and inverse changeset rollback.
 - Liveness and dependency-aware readiness endpoints.
 - A vessel editor that converts assembly and legacy workspace uploads, previews private part geometry, edits individual or bulk deployment states, rotates the whole vessel, and saves into a draft change set.
@@ -83,15 +83,15 @@ Populate the integration settings in `.env` before using remote status or public
 - `ota_authentik_secret`
 - `ota_github_private_key`
 - `ota_weblate_token`
-- `ota_gitlab_token`
+- `ota_onedev_token`
 
-Set `AUTHENTIK_CLIENT_ID`, `GITHUB_APP_ID`, and `GITHUB_APP_INSTALLATION_ID` as stack environment variables. Configure Caddy to proxy `ota-admin.rendezvous.dev` to `app:8080`.
+Set `AUTHENTIK_CLIENT_ID`, `GITHUB_APP_ID`, and `GITHUB_APP_INSTALLATION_ID` as stack environment variables. Configure Caddy to proxy `ota-admin.ksp2redux.org` to `app:8080`.
 
 The GitHub Actions workflow tests pull requests and pushes to `main`. A successful push to `main` publishes `ghcr.io/ksp2redux/otacontentadmin:main` plus an immutable commit-SHA tag. Make the GHCR package public after its first publication, then configure Portainer to pull the image by an immutable SHA tag for production deployments.
 
-The Authentik provider must use authorization code with PKCE, asymmetric signing, issuer `https://sso.rendezvous.dev/application/o/redux-ota-admin/`, and exact callback `https://ota-admin.rendezvous.dev/auth/callback`. Request only `openid profile email`. Enforce the publisher group in Authentik as well as in this application.
+The Authentik provider must use authorization code with PKCE, asymmetric signing, issuer `https://sso.ksp2redux.org/application/o/redux-ota-admin/`, and exact callback `https://ota-admin.ksp2redux.org/auth/callback`. Request only `openid profile email`. Enforce the publisher group in Authentik as well as in this application.
 
-The GitHub App installation must be limited to `KSP2Redux/Content` with Metadata read and Contents read/write. The Weblate service account needs only KSP2Redux repository and source-unit operations. The GitLab project token needs only pipeline creation and status access.
+The GitHub App installation must be limited to `KSP2Redux/Content` with Metadata read and Contents read/write. The Weblate service account needs only KSP2Redux repository and source-unit operations. The OneDev service account needs code read, build visibility, and permission to run only `publish-ota-content` on `rendezvous-entertainment/ksp2redux`. The application pins each publication to the current `develop` commit and runs that job directly.
 
 Restrict management of the secret volume to Portainer administrators. Never place its contents in the Git repository, stack environment variables, or the Portainer stack editor. Docker Standalone volumes are not encrypted Docker Swarm secrets, so access to the Docker host remains privileged access to these credentials.
 
@@ -102,7 +102,7 @@ Because this is a public repository for a privileged application, enable GitHub 
 ## Operations
 
 - `/health/live` confirms the process is responsive.
-- `/health/ready` checks PostgreSQL, Redis, Authentik discovery, GitHub, Weblate, and GitLab without mutating them.
+- `/health/ready` checks PostgreSQL, Redis, Authentik discovery, GitHub, Weblate, and OneDev without mutating them.
 - Run migrations during deployment with `php artisan migrate --force`.
 - Draft payloads older than 30 days are deleted by the scheduler; database audit metadata is retained.
 - The existing nightly localization publisher remains enabled. The application uses a non-force compare-and-update on `Content/main` to guard the final race.
@@ -116,7 +116,7 @@ php artisan route:list
 docker compose config
 ```
 
-Staging must use a test Content repository and a non-production GitLab pipeline. Production acceptance must exercise Authentik access denial, each content operation, Weblate no-op and pending-change paths, stale same-channel edits, a concurrent localization update, rollback, and failure recovery.
+Staging must use a test Content repository and a non-production OneDev publication job. Production acceptance must exercise Authentik access denial, each content operation, Weblate no-op and pending-change paths, stale same-channel edits, a concurrent localization update, rollback, and failure recovery.
 
 ## Compatibility catalog
 

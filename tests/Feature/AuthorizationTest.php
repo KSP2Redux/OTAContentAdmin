@@ -170,17 +170,20 @@ class AuthorizationTest extends TestCase
     public function test_system_status_uses_labeled_summaries_instead_of_raw_json(): void
     {
         Cache::put('github-app-token', 'test-github-token');
-        config()->set('ota.gitlab.token', 'test-token');
+        config()->set('ota.onedev.token', 'test-token');
         $contentSha = str_repeat('b', 40);
-        $gitlabUrl = rtrim(config('ota.gitlab.url'), '/');
+        $onedevUrl = rtrim(config('ota.onedev.url'), '/');
         Http::fake([
             'https://api.github.com/repos/*' => Http::response(['object' => ['sha' => $contentSha]]),
-            "{$gitlabUrl}/projects/*/pipelines*" => Http::response([[
-                'id' => 42,
-                'status' => 'success',
-                'ref' => 'develop',
-                'updated_at' => '2026-09-05T00:00:00Z',
-                'web_url' => 'https://git.example.test/pipelines/42',
+            "{$onedevUrl}/projects/1017" => Http::response(['path' => 'rendezvous-entertainment/ksp2redux']),
+            "{$onedevUrl}/builds*" => Http::response([[
+                'id' => 123,
+                'number' => 42,
+                'projectId' => 1017,
+                'jobName' => 'publish-ota-content',
+                'status' => 'SUCCESSFUL',
+                'refName' => 'refs/heads/develop',
+                'submitDate' => '2026-09-05T00:00:00Z',
             ]]),
         ]);
         $user = User::factory()->create(['groups' => [config('ota.auth.publisher_group')]]);
@@ -210,10 +213,11 @@ class AuthorizationTest extends TestCase
         Cache::put('github-app-token', 'test-github-token');
         Redis::shouldReceive('connection->command')->once()->with('ping')->andReturn('PONG');
         config()->set('ota.weblate.token', 'test-weblate-token');
-        config()->set('ota.gitlab.token', 'test-gitlab-token');
+        config()->set('ota.onedev.token', 'test-onedev-token');
 
         Http::fake([
             'https://api.github.com/repos/*' => Http::response(['object' => ['sha' => str_repeat('c', 40)]]),
+            '*/repositories/1017/branches/develop' => Http::response(['commitHash' => str_repeat('d', 40)]),
             '*' => Http::response([]),
         ]);
 

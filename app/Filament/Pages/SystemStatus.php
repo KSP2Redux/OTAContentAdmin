@@ -4,7 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Services\Content\CompatibilityCatalog;
 use App\Services\Integrations\GitHubContentRepository;
-use App\Services\Integrations\GitLabClient;
+use App\Services\Integrations\OneDevClient;
 use App\Support\SecretRedactor;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
@@ -49,10 +49,10 @@ class SystemStatus extends Page
             ),
             $this->check(
                 title: 'Publication pipeline',
-                description: 'The most recent Ksp2Redux GitLab pipeline.',
+                description: 'The most recent Ksp2Redux OneDev OTA publication build.',
                 icon: 'heroicon-o-rocket-launch',
                 callback: function (): array {
-                    $pipeline = app(GitLabClient::class)->latest();
+                    $pipeline = app(OneDevClient::class)->latest();
                     if ($pipeline === []) {
                         return [
                             'status' => 'Connected',
@@ -63,13 +63,13 @@ class SystemStatus extends Page
                     return [
                         'status' => 'Connected',
                         'details' => [
-                            ['label' => 'Pipeline', 'value' => '#'.($pipeline['id'] ?? 'Unknown')],
+                            ['label' => 'Pipeline', 'value' => '#'.($pipeline['number'] ?? 'Unknown')],
                             ['label' => 'Result', 'value' => str((string) ($pipeline['status'] ?? 'unknown'))->replace('_', ' ')->headline()],
-                            ['label' => 'Source branch', 'value' => $pipeline['ref'] ?? 'Unknown'],
-                            ['label' => 'Last updated', 'value' => $this->formatDate($pipeline['updated_at'] ?? null)],
+                            ['label' => 'Source branch', 'value' => $pipeline['refName'] ?? 'Unknown'],
+                            ['label' => 'Last updated', 'value' => $this->formatDate($pipeline['finishDate'] ?? $pipeline['runningDate'] ?? $pipeline['submitDate'] ?? null)],
                         ],
                         'link' => $pipeline['web_url'] ?? null,
-                        'link_label' => 'View pipeline in GitLab',
+                        'link_label' => 'View build in OneDev',
                     ];
                 },
             ),

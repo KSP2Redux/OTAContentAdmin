@@ -7,7 +7,7 @@ final class SecretRedactor
     public static function message(\Throwable $exception): string
     {
         $message = $exception->getMessage();
-        foreach ([config('ota.weblate.token'), config('ota.gitlab.token'), config('ota.github_app.private_key'), config('services.openidconnect.client_secret')] as $secret) {
+        foreach ([config('ota.weblate.token'), config('ota.onedev.token'), config('ota.gitlab.token'), config('ota.github_app.private_key'), config('services.openidconnect.client_secret')] as $secret) {
             if (is_string($secret) && $secret !== '') {
                 $message = str_replace([$secret, rawurlencode($secret)], '[redacted]', $message);
             }

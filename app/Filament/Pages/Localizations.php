@@ -21,7 +21,7 @@ class Localizations extends Page
     protected function getHeaderActions(): array
     {
         return [Action::make('flush')->label('Flush and publish')->icon('heroicon-o-language')->color('success')->requiresConfirmation()
-            ->modalDescription('Commit and push Weblate, run the existing GitLab OTA job, and verify Content/main?')
+            ->modalDescription('Commit and push Weblate, run the existing OneDev OTA job, and verify Content/main?')
             ->action(function (): void {
                 if (PublishRun::query()->whereIn('state', ['queued', 'running', 'cancelling'])->exists()) {
                     Notification::make()->title('Another OTA publication is already queued or running')->danger()->send();

@@ -16,7 +16,7 @@ class PublishRunInfolist
                     TextEntry::make('kind')->badge(), TextEntry::make('state')->badge(), TextEntry::make('stage'), TextEntry::make('user.name')->label('Publisher'),
                     TextEntry::make('changeSet.summary')->label('Change set'), TextEntry::make('correlation_id')->copyable(),
                     TextEntry::make('weblate_task_url')->url(fn ($state) => $state)->openUrlInNewTab(),
-                    TextEntry::make('gitlab_pipeline_url')->url(fn ($state) => $state)->openUrlInNewTab(),
+                    TextEntry::make('gitlab_pipeline_url')->label('Publication build')->url(fn ($state) => $state)->openUrlInNewTab(),
                     TextEntry::make('github_commit_url')->url(fn ($state) => $state)->openUrlInNewTab(),
                     TextEntry::make('started_at')->dateTime(), TextEntry::make('finished_at')->dateTime(),
                 ])->columns(2),

@@ -14,7 +14,7 @@ COPY resources ./resources
 COPY app/Filament ./app/Filament
 RUN npm run build
 
-FROM php:8.3-apache
+FROM php:8.3.36-apache-trixie@sha256:4aed5d62fe32801afa58b3d18c26b12aa86f25da27526c128cce99e63a38a4b0
 RUN apt-get update && apt-get install -y --no-install-recommends libicu-dev libpq-dev libzip-dev unzip curl \
     && docker-php-ext-install intl pdo_pgsql zip opcache pcntl \
     && a2enmod rewrite headers \

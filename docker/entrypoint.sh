@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 umask 0007
-for name in APP_KEY DB_PASSWORD AUTHENTIK_CLIENT_SECRET GITHUB_APP_PRIVATE_KEY WEBLATE_TOKEN GITLAB_TOKEN; do
+for name in APP_KEY DB_PASSWORD AUTHENTIK_CLIENT_SECRET GITHUB_APP_PRIVATE_KEY WEBLATE_TOKEN ONEDEV_TOKEN; do
     eval file="\${${name}_FILE:-}"
     if [ -n "$file" ] && [ -f "$file" ]; then
         value=$(cat "$file")
